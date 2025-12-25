@@ -1,0 +1,21 @@
+@font-face {
+    font-family: 'Daydream';
+    src: local('Daydream'), local('Daydream Regular');
+    /* ถ้า Nair มีไฟล์ .ttf สามารถใส่ url('Daydream.ttf') ได้ค่ะ */
+}
+
+body,
+html {
+    margin: 0;
+    padding: 0;
+    width: 1920px;
+    height: 1080px;
+    overflow: hidden;
+    background: transparent;
+    /* สำคัญมากสำหรับ OBS */
+}
+
+#overlay-container {
+    width: 100%;
+    height: 100%;
+}
