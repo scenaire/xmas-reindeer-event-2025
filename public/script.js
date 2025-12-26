@@ -32,6 +32,26 @@ socket.on('game_event', (data) => {
             });
         }
     }
+
+    // ✅ 3. กรณีสั่ง update wish (UPDATE_WISH) - เพิ่มใหม่!
+    else if (data.type === 'UPDATE_WISH') {
+        const deer = activeReindeers[data.owner];
+        if (deer && !deer.destroyed) {
+            // update wish
+            deer.wish = data.wish;
+
+            //NO BUBBLE YET BUT I WILL ADD IT LATER
+
+            deer.nameTag.text = `${data.owner}\n"${data.wish}"`; // update name tag
+            deer.nameTag.alpha = 1;
+            deer.nameTagFadeDelay = 300;
+
+            //EFFECT: Reindeer Jump
+            deer.velocityY = -10;
+
+            console.log('update wish for ' + data.owner);
+        }
+    }
 });
 
 let respawnQueue = [];

@@ -5,6 +5,7 @@ import crypto from 'crypto';
 import 'dotenv/config';
 import fs from 'fs-extra';
 import { GachaManager } from './src/backend/gachaManager.js';
+import tmi from 'tmi.js';
 
 // --- Configuration ---
 const PORT = process.env.PORT || 8080;
@@ -13,12 +14,12 @@ const TWITCH_SECRET = process.env.TWITCH_SIGNING_SECRET; // อย่าลื�
 const CLIENT_ID = process.env.TWITCH_CLIENT_ID;
 const USER_ACCESS_TOKEN = process.env.TWITCH_USER_ACCESS_TOKEN; // ใช้ User Token
 const CHANNEL_NAME = process.env.CHANNEL_NAME;
-
 const ONLINE_CHECK_INTERVAL = 20000; // เช็คชื่อทุก 20 วินาที
 
 // --- File Paths ---
 const REINDEER_LOG_PATH = './data/reindeers.json';
 const GAME_STATE_PATH = './data/gameState.json';
+const COLLECTION_PATH = './data/collection.json';
 
 // --- Setup Server ---
 const app = express();
@@ -174,6 +175,7 @@ app.post('/eventsub/callback', (req, res) => {
         else if (rewardTitle.includes("spawn reindeer")) {
             console.log("🦌 SPAWN: Rolling Gacha...");
             const result = gachaSystem.roll(userName);
+            unlockRarity(userName, result.rarity);
             const bubbleType = analyzeWish(userInput);
             const payload = {
                 type: 'SPAWN', id: Date.now(), owner: userName, wish: userInput,
@@ -186,6 +188,26 @@ app.post('/eventsub/callback', (req, res) => {
             updateGameState(payload);
             visibleUsers.add(userName);
             logReindeer(payload);
+        }
+        else if (rewardTitle.includes("reindeer: make a wish")) {
+            const currentState = loadGameState();
+            const currentDeer = currentState[userName];
+
+            if (currentDeer) {
+                console.log(`✨ ${userName} made a new wish: "${userInput}"`);
+
+                //1. update wish
+                currentDeer.wish = userInput;
+                currentDeer.bubbleType = analyzeWish(userInput);
+
+                //2. save state
+                updateGameState(currentState);
+
+                //3. emit event
+                io.emit('game_event', { type: 'UPDATE_WISH', owner: userName, wish: currentDeer.wish, bubbleType: currentDeer.bubbleType });
+            } else {
+                console.log(`❌ ${userName} tried to wish, but has no reindeer.`);
+            }
         }
         return res.sendStatus(200);
     }
@@ -210,6 +232,30 @@ function analyzeWish(text) {
     if (/ผี|บิด|ปวดหลัง|นอน|งาน|ทุบ|สยอง|ตาย|horror|ghost|scam/.test(t)) return 'chaos';
     return 'default';
 }
+
+// 1. โหลดสมุดสะสม
+function loadCollection() {
+    fs.ensureFileSync(COLLECTION_PATH);
+    try { return fs.readJsonSync(COLLECTION_PATH); } catch (err) { return {}; }
+}
+
+// 2. บันทึกระดับใหม่ลงสมุด (ใช้ตอนสุ่มกาชา)
+function unlockRarity(username, rarity) {
+    const collection = loadCollection();
+    const user = username.toLowerCase();
+
+    if (!collection[user]) {
+        collection[user] = [];
+    }
+
+    // ถ้ายังไม่เคยมีระดับนี้ ให้เพิ่มเข้าไป
+    if (!collection[user].includes(rarity)) {
+        collection[user].push(rarity);
+        fs.writeJsonSync(COLLECTION_PATH, collection, { spaces: 2 });
+        console.log(`🔓 ${username} unlocked new rarity: ${rarity}`);
+    }
+}
+
 function logReindeer(data) {
     fs.ensureFileSync(REINDEER_LOG_PATH);
     const logs = fs.readJsonSync(REINDEER_LOG_PATH, { throws: false }) || [];
@@ -217,7 +263,85 @@ function logReindeer(data) {
     fs.writeJsonSync(REINDEER_LOG_PATH, logs);
 }
 
+// --- 💬 TMI.js (Chat Bot System) ---
+
+// ตั้งค่า Bot เพื่อฟังแชท
+const client = new tmi.Client({
+    channels: [process.env.CHANNEL_NAME] // ฟังห้องเราเอง
+});
+
+client.connect().catch(console.error);
+
+client.on('message', (channel, tags, message, self) => {
+    if (self) return; // ไม่คุยกับตัวเอง
+
+    // เช็คคำสั่ง !reindeer change [rarity]
+    if (message.toLowerCase().startsWith('!reindeer change')) {
+        const args = message.split(' ');
+        if (args.length < 3) return; // พิมพ์มาไม่ครบ
+
+        const targetRarity = args[2].toLowerCase(); // ระดับที่อยากเปลี่ยน (common, rare, mythic)
+        const userName = tags.username; // ชื่อคนพิมพ์
+        const userNameKey = userName.toLowerCase();
+
+        // 1. เช็คว่ามีของไหม? (ใน Collection)
+        const collection = loadCollection();
+        const userUnlocks = collection[userNameKey] || [];
+
+        // แปลง unlock ของ user เป็นตัวเล็กให้หมดเพื่อเช็ค
+        const hasUnlocked = userUnlocks.some(r => r.toLowerCase() === targetRarity);
+
+        if (hasUnlocked) {
+            console.log(`🔄 ${userName} switching to ${targetRarity}...`);
+            changeReindeerSkin(userName, targetRarity);
+        } else {
+            console.log(`❌ ${userName} try to switch to ${targetRarity} but doesn't own it.`);
+            // (Optional) อาจจะให้ Bot พิมพ์ตอบกลับไปว่า "ยังไม่มีนะจ๊ะ" ก็ได้
+        }
+    }
+});
+
+// 🎮 ฟังก์ชันเปลี่ยนร่าง (Animation: Leave -> Enter)
+function changeReindeerSkin(ownerName, targetRarity) {
+    const currentState = loadGameState();
+    const currentDeer = currentState[ownerName];
+
+    // ถ้าไม่มีกวางอยู่บนจอ เปลี่ยนไม่ได้นะ
+    if (!currentDeer) return;
+
+    // 1. สั่งตัวเก่าวิ่งออกไป (Dismiss)
+    io.emit('game_event', { type: 'DISMISS', owner: ownerName });
+
+    // 2. สร้างข้อมูลตัวใหม่ (เอาข้อมูลเดิมมาแก้แค่ Image/Rarity)
+    // (เราต้องถาม GachaSystem ว่า Rarity นี้ใช้รูปอะไร)
+    // ** หมายเหตุ: ต้องเพิ่มฟังก์ชัน getImageForRarity ใน GachaManager หรือเขียน Logic ง่ายๆ ตรงนี้ **
+
+    // สมมติ Logic การเลือกรูปง่ายๆ ตาม Rarity (หรือคุณจะดึงจาก Config ก็ได้)
+    let newImage = 'texture_0.png'; // Default Common
+    if (targetRarity === 'uncommon') newImage = 'texture_1.png';
+    else if (targetRarity === 'rare') newImage = 'texture_2.png';
+    else if (targetRarity === 'epic') newImage = 'texture_3.png';
+    else if (targetRarity === 'mythic') newImage = 'texture_4.png';
+    else if (targetRarity === 'legendary') newImage = 'texture_5.png';
+
+    const newPayload = {
+        ...currentDeer, // ก๊อปข้อมูลเดิม (คำอธิษฐาน, ชื่อ)
+        id: Date.now(),
+        rarity: targetRarity.charAt(0).toUpperCase() + targetRarity.slice(1), // ทำให้ตัวแรกใหญ่สวยๆ
+        image: newImage,
+        isRestore: false // ให้เดินเข้าใหม่เหมือนสุ่มมา
+    };
+
+    // 3. รอแป๊บนึง แล้วสั่งตัวใหม่เดินเข้ามา (Spawn)
+    setTimeout(() => {
+        io.emit('game_event', { type: 'SPAWN', ...newPayload });
+        updateGameState(newPayload); // บันทึก State ใหม่
+        logReindeer(newPayload); // (Optional) จะบันทึก Log การเปลี่ยนร่างไหม แล้วแต่ชอบ
+    }, 4000); // รอ 4 วินาที (ให้ตัวเก่าวิ่งพ้นจอก่อน)
+}
+
 httpServer.listen(PORT, () => {
     console.log(`🎄 Xmas Server running on port ${PORT}`);
     console.log(`📡 Online Check enabled using Helix API`);
 });
+
