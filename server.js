@@ -201,7 +201,7 @@ app.post('/eventsub/callback', (req, res) => {
                 currentDeer.bubbleType = analyzeWish(userInput);
 
                 //2. save state
-                updateGameState(currentState);
+                updateGameState(currentDeer);
 
                 //3. emit event
                 io.emit('game_event', { type: 'UPDATE_WISH', owner: userName, wish: currentDeer.wish, bubbleType: currentDeer.bubbleType });
