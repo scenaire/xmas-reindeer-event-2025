@@ -1,0 +1,14 @@
+{
+  "c_nairs": {
+    "type": "SPAWN",
+    "id": 1766847987353,
+    "owner": "c_nairs",
+    "wish": "",
+    "rarity": "Rare",
+    "image": "texture_2.png",
+    "bubbleType": "default",
+    "behavior": "normal",
+    "pityCount": 0,
+    "isNewYear": false
+  }
+}

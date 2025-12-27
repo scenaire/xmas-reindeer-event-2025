@@ -178,9 +178,19 @@ app.post('/eventsub/callback', (req, res) => {
             unlockRarity(userName, result.rarity);
             const bubbleType = analyzeWish(userInput);
             const payload = {
-                type: 'SPAWN', id: Date.now(), owner: userName, wish: userInput,
-                rarity: result.rarity, image: result.image, bubbleType: bubbleType,
-                behavior: result.behavior, pityCount: result.pityCount,
+                type: 'SPAWN',
+                id: Date.now(),
+                owner: userName,
+                wish: finalWish,
+                rarity: result.rarity,
+                image: result.image,
+                bubbleType: bubbleType,
+                behavior: result.behavior,
+
+                // ✅ ส่งค่า Pity ไปด้วย (เผื่ออนาคตอยากทำ UI โชว์หลอดเกลือ)
+                pity4: result.pity4,
+                pity5: result.pity5,
+
                 isNewYear: process.env.EVENT_MODE === 'new_year'
             };
 
@@ -322,7 +332,6 @@ function changeReindeerSkin(ownerName, targetRarity) {
     else if (targetRarity === 'rare') newImage = 'texture_2.png';
     else if (targetRarity === 'epic') newImage = 'texture_3.png';
     else if (targetRarity === 'mythic') newImage = 'texture_4.png';
-    else if (targetRarity === 'legendary') newImage = 'texture_5.png';
 
     const newPayload = {
         ...currentDeer, // ก๊อปข้อมูลเดิม (คำอธิษฐาน, ชื่อ)
