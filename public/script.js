@@ -5,6 +5,7 @@ const app = new PIXI.Application({
     backgroundAlpha: 0,
     antialias: true
 });
+PIXI.settings.SCALE_MODE = PIXI.SCALE_MODES.NEAREST;
 document.getElementById('overlay-container').appendChild(app.view);
 
 // ✅ เปิดระบบจัดเรียงลำดับ (Z-Index Sorting)
@@ -12,6 +13,8 @@ app.stage.sortableChildren = true;
 
 const activeReindeers = {};
 const rarityValue = { 'Common': 1, 'Uncommon': 2, 'Rare': 3, 'Epic': 4, 'Mythic': 5 };
+
+
 
 // --- 0. ส่วนรับข้อมูลจาก Server (Socket) ---
 
@@ -209,15 +212,59 @@ function handleSpawnLogic(newData) {
 // --- 2. การสร้างและควบคุมกวาง (Core) ---
 
 function createReindeer(config) {
-    const texture = PIXI.Texture.from(`/assets/${config.image}`);
-    const reindeer = new PIXI.Sprite(texture);
+    let reindeer;
 
-    texture.baseTexture.scaleMode = PIXI.SCALE_MODES.NEAREST;
+    // ✅ เช็ค: ถ้าเป็นกวาง Common (texture_0) ให้ใช้อนิเมชั่นดุ๊กดิ๊ก
+    if (config.image === 'texture_0.png') { // กวาง Common
+
+        // 1. สร้างตัวเปล่าๆ ด้วยรูปนิ่งก่อน
+        const staticTexture = PIXI.Texture.from(`/assets/${config.image}`);
+        reindeer = new PIXI.AnimatedSprite([staticTexture]);
+
+        // 2. 🗂️ เตรียมคลังอนิเมชั่น (เก็บไว้ในตัวกวางเลย)
+        reindeer.animData = {
+            idle: [staticTexture], // เริ่มต้นด้วยรูปนิ่ง
+            walk: [staticTexture],
+            run: [staticTexture]
+        };
+
+        // 3. ⚡ สั่งโหลดทุกท่าพร้อมกัน (Async)
+        // (สมมติว่าคุณมีไฟล์พวกนี้แล้ว หรือจะเพิ่มทีหลังก็ได้)
+        const loadAllAnims = async () => {
+            // โหลดท่า IDLE
+            const idleFrames = await loadSpriteSheet('texture_0_idle.png', 6);
+            if (idleFrames) {
+                reindeer.animData.idle = idleFrames;
+                if (reindeer.state === 'IDLE') reindeer.textures = idleFrames; // อัปเดตทันทีถ้าว่างอยู่
+                reindeer.play();
+            }
+
+            // โหลดท่า WALK (ตัวอย่าง: สมมติมี 8 เฟรม)
+            // const walkFrames = await loadSpriteSheet('texture_0_walk.png', 8);
+            // if (walkFrames) reindeer.animData.walk = walkFrames;
+
+            // โหลดท่า RUN (ตัวอย่าง: สมมติมี 6 เฟรม)
+            // const runFrames = await loadSpriteSheet('texture_0_run.png', 6);
+            // if (runFrames) reindeer.animData.run = runFrames;
+        };
+
+        loadAllAnims(); // รันเลยไม่ต้องรอ
+    }
+    else {
+        // กวางระดับอื่น (รูปนิ่ง)
+        const texture = PIXI.Texture.from(`/assets/${config.image}`);
+        reindeer = new PIXI.Sprite(texture);
+        // สร้าง animData ปลอมๆ กัน Error เวลาเรียกใช้
+        reindeer.animData = { idle: [texture], walk: [texture], run: [texture] };
+    }
+
+    // ตั้งค่าพื้นฐาน (เหมือนเดิม)
+    reindeer.texture.baseTexture.scaleMode = PIXI.SCALE_MODES.NEAREST;
     reindeer.anchor.set(0.5);
 
     // Scale
     let scaleValue = 2;
-    if (config.rarity === 'Mythic') scaleValue = 3;
+    if (config.rarity === 'Mythic') scaleValue = 2.3;
     reindeer.scale.set(scaleValue);
 
     // 📍 Spawn Position: เริ่มที่ "นอกจอฝั่งซ้าย"
@@ -233,13 +280,23 @@ function createReindeer(config) {
         fontSize: 6, fill: '#4B3621', stroke: '#FFFFFF', strokeThickness: 2,
         align: 'center', fontWeight: 'bold'
     });
-    const nameTag = new PIXI.Text(config.owner, nameStyle);
+
+    // ✅ แก้ไข: ถ้ามี wish ให้โชว์บรรทัดล่าง ถ้าไม่มีให้โชว์แค่ชื่อ
+    let tagText = config.owner;
+    if (config.wish && config.wish !== "") {
+        tagText += `\n"${config.wish}"`;
+    }
+
+    const nameTag = new PIXI.Text(tagText, nameStyle); // ใช้ข้อความที่จัดแล้ว
+
     nameTag.anchor.set(0.5);
     nameTag.y = 28; // ใต้เท้า
     nameTag.texture.baseTexture.scaleMode = PIXI.SCALE_MODES.NEAREST;
     nameTag.resolution = 2;
 
     reindeer.addChild(nameTag);
+
+
 
     // ✨ เก็บ Reference และตัวนับเวลาสำหรับ Fade Out
     reindeer.nameTag = nameTag;
@@ -265,6 +322,26 @@ function createReindeer(config) {
 
         // 1. เรียงลำดับความลึก
         reindeer.zIndex = reindeer.y;
+
+        // 🔄 ระบบเปลี่ยนท่าอัตโนมัติ (Animation State Machine)
+        if (reindeer.animData) {
+            let targetAnim = reindeer.animData.idle; // ค่า Default
+
+            // เลือกท่าตามสถานะปัจจุบัน
+            if (reindeer.state === 'WALK') targetAnim = reindeer.animData.walk;
+            else if (reindeer.state === 'LEAVING') targetAnim = reindeer.animData.run;
+            else if (reindeer.state === 'IDLE') targetAnim = reindeer.animData.idle;
+
+            // ถ้าท่าเปลี่ยน และ Textures นั้นมีของอยู่จริง -> สลับเลย!
+            if (reindeer.textures !== targetAnim && targetAnim.length > 0) {
+                reindeer.textures = targetAnim;
+                reindeer.play();
+
+                // ปรับความเร็วตามท่าทางได้ด้วยนะ
+                if (reindeer.state === 'LEAVING') reindeer.animationSpeed = 0.2; // วิ่งเร็ว
+                else reindeer.animationSpeed = 0.08; // เดิน/ยืนช้าๆ
+            }
+        }
 
         // 2. Physics & Gravity Control
         if (reindeer.isZeroGravity) {
@@ -452,6 +529,31 @@ function updateWanderBehavior(deer, delta) {
 
 function updateWishDisplay(deer, newWish) {
     console.log(`💬 Updated wish for ${deer.data.owner}: ${newWish}`);
+}
+
+// 🛠️ Helper: โหลดและตัด Sprite Sheet แบบสำเร็จรูป
+async function loadSpriteSheet(path, frameCount) {
+    const url = `/assets/${path}?v=${Date.now()}`; // กัน Cache
+
+    try {
+        const sheetTexture = await PIXI.Assets.load(url);
+        const base = sheetTexture.baseTexture;
+
+        if (!base.valid || base.width === 0) return null;
+
+        const frameWidth = Math.floor(base.width / frameCount);
+        const frameHeight = base.height;
+        const frames = [];
+
+        for (let i = 0; i < frameCount; i++) {
+            const rect = new PIXI.Rectangle(i * frameWidth, 0, frameWidth, frameHeight);
+            frames.push(new PIXI.Texture(base, rect));
+        }
+        return frames;
+    } catch (err) {
+        console.error(`Failed to load ${path}:`, err);
+        return null;
+    }
 }
 
 // --- 🧪 Real-World Simulator Test Button ---

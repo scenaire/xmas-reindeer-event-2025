@@ -174,23 +174,28 @@ app.post('/eventsub/callback', (req, res) => {
         else if (rewardTitle.includes("reindeer: zero gravity")) io.emit('command', { type: 'ZERO_GRAVITY' });
         else if (rewardTitle.includes("spawn reindeer")) {
             console.log("🦌 SPAWN: Rolling Gacha...");
+
+            // 1. สุ่มเกลือ/ไม่เกลือ
             const result = gachaSystem.roll(userName);
             unlockRarity(userName, result.rarity);
-            const bubbleType = analyzeWish(userInput);
+
+            // 2. ✅ รับค่าตรงๆ จากคนดูเลย (ไม่สุ่มให้แล้ว)
+            const currentWish = userInput || ""; // ถ้าไม่มี input ก็ให้เป็นค่าว่าง
+
+            // 3. ✅ เช็ค Bubble: ถ้ามีคำอธิษฐานค่อยวิเคราะห์ ถ้าไม่มีก็เป็น "none"
+            const bubbleType = currentWish ? analyzeWish(currentWish) : "none";
+
             const payload = {
                 type: 'SPAWN',
                 id: Date.now(),
                 owner: userName,
-                wish: finalWish,
+                wish: currentWish,   // ✅ ส่งค่าที่รับมาตรงๆ (แก้จาก finalWish)
                 rarity: result.rarity,
                 image: result.image,
-                bubbleType: bubbleType,
+                bubbleType: bubbleType, // ✅ ส่งประเภท Bubble (หรือ "none")
                 behavior: result.behavior,
-
-                // ✅ ส่งค่า Pity ไปด้วย (เผื่ออนาคตอยากทำ UI โชว์หลอดเกลือ)
                 pity4: result.pity4,
                 pity5: result.pity5,
-
                 isNewYear: process.env.EVENT_MODE === 'new_year'
             };
 
