@@ -42,6 +42,11 @@ function loadGameState() {
 }
 
 function updateGameState(userData) {
+    if (!userData || !userData.owner) {
+        console.error("❌ Error: Trying to save invalid data!", userData);
+        return;
+    }
+
     const currentState = loadGameState();
     currentState[userData.owner] = userData;
     fs.writeJsonSync(GAME_STATE_PATH, currentState, { spaces: 2 });
@@ -113,6 +118,8 @@ setInterval(async () => {
 
     // B. เช็คคนกลับมา
     Object.values(currentState).forEach(deer => {
+        if (!deer || !deer.owner) return;
+
         const ownerLower = deer.owner.toLowerCase();
         if (onlineUsers.has(ownerLower) && !visibleUsers.has(deer.owner)) {
             console.log(`✨ ${deer.owner} returned!`);

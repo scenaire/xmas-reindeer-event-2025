@@ -215,47 +215,59 @@ function createReindeer(config) {
     let reindeer;
 
     // ✅ เช็ค: ถ้าเป็นกวาง Common (texture_0) ให้ใช้อนิเมชั่นดุ๊กดิ๊ก
-    if (config.image === 'texture_0.png') { // กวาง Common
-
-        // 1. สร้างตัวเปล่าๆ ด้วยรูปนิ่งก่อน
+    if (config.image === 'texture_0.png') {
         const staticTexture = PIXI.Texture.from(`/assets/${config.image}`);
         reindeer = new PIXI.AnimatedSprite([staticTexture]);
 
-        // 2. 🗂️ เตรียมคลังอนิเมชั่น (เก็บไว้ในตัวกวางเลย)
         reindeer.animData = {
-            idle: [staticTexture], // เริ่มต้นด้วยรูปนิ่ง
-            walk: [staticTexture],
+            idle: [staticTexture],
+            walk: [staticTexture], // เริ่มต้นด้วยรูปนิ่งก่อนโหลดเสร็จ
             run: [staticTexture]
         };
 
-        // 3. ⚡ สั่งโหลดทุกท่าพร้อมกัน (Async)
-        // (สมมติว่าคุณมีไฟล์พวกนี้แล้ว หรือจะเพิ่มทีหลังก็ได้)
         const loadAllAnims = async () => {
-            // โหลดท่า IDLE
+            // 1. โหลดท่า IDLE (6 เฟรม)
             const idleFrames = await loadSpriteSheet('texture_0_idle.png', 6);
             if (idleFrames) {
                 reindeer.animData.idle = idleFrames;
-                if (reindeer.state === 'IDLE') reindeer.textures = idleFrames; // อัปเดตทันทีถ้าว่างอยู่
-                reindeer.play();
+                if (reindeer.state === 'IDLE') {
+                    reindeer.textures = idleFrames;
+                    reindeer.play();
+                }
             }
 
-            // โหลดท่า WALK (ตัวอย่าง: สมมติมี 8 เฟรม)
-            // const walkFrames = await loadSpriteSheet('texture_0_walk.png', 8);
-            // if (walkFrames) reindeer.animData.walk = walkFrames;
-
-            // โหลดท่า RUN (ตัวอย่าง: สมมติมี 6 เฟรม)
-            // const runFrames = await loadSpriteSheet('texture_0_run.png', 6);
-            // if (runFrames) reindeer.animData.run = runFrames;
+            // 2. ✅ โหลดท่า WALK (6 เฟรมใหม่ที่ Nair ส่งมา!)
+            const walkFrames = await loadSpriteSheet('texture_0_walk.png', 6);
+            if (walkFrames) {
+                reindeer.animData.walk = walkFrames;
+                // ถ้ากวางกำลังเดินอยู่ ให้สลับมาใช้ท่าเดินทันที
+                if (reindeer.state === 'WALK' || reindeer.state === 'ENTERING') {
+                    reindeer.textures = walkFrames;
+                    reindeer.play();
+                }
+            }
         };
 
-        loadAllAnims(); // รันเลยไม่ต้องรอ
+        loadAllAnims();
     }
     else {
-        // กวางระดับอื่น (รูปนิ่ง)
+        // 🟦 กวางระดับอื่น (Rare/Mythic ฯลฯ)
         const texture = PIXI.Texture.from(`/assets/${config.image}`);
-        reindeer = new PIXI.Sprite(texture);
-        // สร้าง animData ปลอมๆ กัน Error เวลาเรียกใช้
-        reindeer.animData = { idle: [texture], walk: [texture], run: [texture] };
+
+        // ❌ ของเดิม: สร้างเป็น Sprite ธรรมดา (สาเหตุที่พัง เพราะมันไม่มี .play())
+        // reindeer = new PIXI.Sprite(texture);
+
+        // ✅ ของใหม่: สร้างเป็น AnimatedSprite (ใส่ [] ครอบ texture ไว้)
+        reindeer = new PIXI.AnimatedSprite([texture]);
+
+        // สร้างข้อมูลอนิเมชั่นปลอมๆ ให้มัน (จะได้ไม่ Error เวลาสลับท่า)
+        reindeer.animData = {
+            idle: [texture],
+            walk: [texture],
+            run: [texture]
+        };
+
+        reindeer.play(); // สั่งให้เล่น (ถึงจะมีเฟรมเดียวก็เถอะ)
     }
 
     // ตั้งค่าพื้นฐาน (เหมือนเดิม)
@@ -324,22 +336,33 @@ function createReindeer(config) {
         reindeer.zIndex = reindeer.y;
 
         // 🔄 ระบบเปลี่ยนท่าอัตโนมัติ (Animation State Machine)
+        // ... (ภายใน tick function ของ createReindeer) ...
+
+        // 🔄 ระบบเปลี่ยนท่าอัตโนมัติ
         if (reindeer.animData) {
-            let targetAnim = reindeer.animData.idle; // ค่า Default
+            let targetAnim = reindeer.animData.idle;
 
-            // เลือกท่าตามสถานะปัจจุบัน
-            if (reindeer.state === 'WALK') targetAnim = reindeer.animData.walk;
-            else if (reindeer.state === 'LEAVING') targetAnim = reindeer.animData.run;
-            else if (reindeer.state === 'IDLE') targetAnim = reindeer.animData.idle;
+            // เลือกท่าตามสถานะ
+            if (reindeer.state === 'WALK' || reindeer.state === 'ENTERING') {
+                targetAnim = reindeer.animData.walk;
+            } else if (reindeer.state === 'LEAVING') {
+                targetAnim = reindeer.animData.run || reindeer.animData.walk; // ถ้ายังไม่มีท่ารัน ให้ใช้ท่าเดินแทน
+            } else {
+                targetAnim = reindeer.animData.idle;
+            }
 
-            // ถ้าท่าเปลี่ยน และ Textures นั้นมีของอยู่จริง -> สลับเลย!
-            if (reindeer.textures !== targetAnim && targetAnim.length > 0) {
+            // ถ้าท่าเปลี่ยน ให้สลับ Textures ทันที
+            if (reindeer.textures !== targetAnim && targetAnim.length > 1) {
                 reindeer.textures = targetAnim;
-                reindeer.play();
 
-                // ปรับความเร็วตามท่าทางได้ด้วยนะ
-                if (reindeer.state === 'LEAVING') reindeer.animationSpeed = 0.2; // วิ่งเร็ว
-                else reindeer.animationSpeed = 0.08; // เดิน/ยืนช้าๆ
+                // ปรับความเร็วตามท่า
+                if (reindeer.state === 'ENTERING' || reindeer.state === 'WALK') {
+                    reindeer.animationSpeed = 0.12; // ความเร็วเดินนุ่มๆ
+                } else {
+                    reindeer.animationSpeed = 0.08; // ความเร็ว IDLE ชิลล์ๆ
+                }
+
+                reindeer.play();
             }
         }
 
