@@ -175,37 +175,46 @@ function processRespawnQueue() {
 
 // --- 1. Logic การตัดสินใจ (Director) ---
 
+// ใน public/script.js
+
 function handleSpawnLogic(newData) {
     const owner = newData.owner;
     const existingDeer = activeReindeers[owner];
 
-    // กรณีที่ 1: ยังไม่เคยมีกวาง -> เดินหล่อๆ เข้ามาจากซ้ายเลย
+    // กรณีที่ 1: ไม่มีกวางอยู่เลย -> สร้างใหม่ทันที
     if (!existingDeer) {
         createReindeer(newData);
         return;
     }
 
-    // กรณีที่ 2: มีกวางอยู่แล้ว -> เช็คระดับ
+    // ✅ เพิ่มส่วนนี้: ถ้ากวางตัวเก่ากำลังวิ่งหนี (LEAVING) ให้ต่อคิวรอ
+    if (existingDeer.state === 'LEAVING') {
+        console.log(`⏳ ${owner} is leaving. Queuing spawn...`);
+
+        // เก็บ Callback เดิมไว้ (ถ้ามี) แล้วสั่งให้สร้างตัวใหม่ต่อท้ายเมื่อวิ่งพ้นจอ
+        const oldCallback = existingDeer.onGoneCallback;
+        existingDeer.onGoneCallback = () => {
+            if (oldCallback) oldCallback(); // ทำสิ่งที่สั่งไว้ก่อนหน้า
+            createReindeer(newData);        // แล้วค่อยสร้างตัวใหม่
+        };
+        return;
+    }
+
+    // กรณีที่ 2: มีกวางอยู่ และยืนเฉยๆ/เดินอยู่ -> เช็คระดับความแรร์ (Logic เดิมของคุณ)
     const oldRarityVal = rarityValue[existingDeer.data.rarity] || 0;
     const newRarityVal = rarityValue[newData.rarity] || 0;
 
     console.log(`🔍 Check: ${owner} (${existingDeer.data.rarity} -> ${newData.rarity})`);
 
     if (newRarityVal > oldRarityVal) {
-        // ✨ Upgrade Effect: สั่งตัวเก่าวิ่งออกขวา -> รอจนหายไป -> สร้างตัวใหม่เดินเข้าซ้าย
         console.log('👋 Dismissing old deer...');
-
         dismissReindeer(existingDeer, () => {
             console.log('✨ Creating new upgraded deer!');
             createReindeer(newData);
         });
-
     } else {
-        // ถ้าระดับเท่าเดิมหรือต่ำกว่า -> อัปเดตแค่คำอธิษฐาน
         updateWishDisplay(existingDeer, newData.wish);
-        existingDeer.velocityY = -10; // เด้งรับทราบ
-
-        // ✨ อัปเดตข้อมูลแล้ว ให้ชื่อเด้งขึ้นมาโชว์ด้วย
+        existingDeer.velocityY = -10;
         if (existingDeer.nameTag) {
             existingDeer.nameTag.alpha = 1;
             existingDeer.nameTagFadeDelay = 180;
@@ -454,6 +463,11 @@ async function createReindeer(config) { // ⚠️ เพิ่ม async ตร�
             const isGoneLeft = (dir < 0 && reindeer.x < -300);
 
             if (isGoneRight || isGoneLeft) {
+
+                if (activeReindeers[reindeer.data.owner] === reindeer) {
+                    delete activeReindeers[reindeer.data.owner];
+                }
+
                 if (reindeer.onGoneCallback) reindeer.onGoneCallback();
                 destroyReindeerSprite(reindeer);
             }
@@ -506,7 +520,6 @@ function dismissReindeer(deer, callback) {
     }
     deer.state = 'LEAVING';
     deer.onGoneCallback = callback;
-    delete activeReindeers[deer.data.owner];
 }
 
 function destroyReindeerSprite(deer) {
