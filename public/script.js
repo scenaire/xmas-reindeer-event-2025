@@ -19,7 +19,60 @@ app.stage.sortableChildren = true;
 const activeReindeers = {};
 const rarityValue = { 'Common': 1, 'Uncommon': 2, 'Rare': 3, 'Epic': 4, 'Mythic': 5 };
 
+// --- 🖼️ Emote System for PIXI ---
 
+const EMOTE_CACHE = new Map(); // เก็บ Texture ที่โหลดแล้ว
+
+// 1. โหลดรูป Emote (คืนค่าเป็น PIXI Texture)
+function loadEmoteTexture(id) {
+    if (EMOTE_CACHE.has(id)) return EMOTE_CACHE.get(id);
+
+    // URL รูป Twitch (Theme Dark)
+    const url = `https://static-cdn.jtvnw.net/emoticons/v2/${id}/default/dark/3.0`;
+    const texture = PIXI.Texture.from(url);
+
+    EMOTE_CACHE.set(id, texture);
+    return texture;
+}
+
+// 2. แปลงข้อความ + Emote Map (ฉบับอัปเกรด)
+function parseMessageWithEmotes(text, emoteMap) {
+    const tokens = [];
+
+    // แยกคำด้วยช่องว่าง (เก็บช่องว่างไว้ด้วยเพื่อความสวยงาม)
+    // Regex: (\s+) จะเก็บ space เป็น token แยกออกมาด้วย
+    const words = text.split(/(\s+)/);
+
+    words.forEach(w => {
+        const cleanWord = w.trim();
+
+        // 1. เช็คจาก Map ที่ Server ส่งมา (แม่นยำสุด)
+        if (emoteMap && emoteMap[cleanWord]) {
+            tokens.push({ type: 'emote', id: emoteMap[cleanWord] });
+        }
+        // 2. ถ้าเป็นช่องว่างเฉยๆ
+        else if (cleanWord === "") {
+            tokens.push({ type: 'text', content: w });
+        }
+        // 3. Fallback: เช็ค Global Dictionary (เผื่อ Server ไม่ได้ส่งมา แต่เรารู้จัก)
+        else {
+            // Hardcode พื้นฐานเผื่อไว้
+            const GLOBAL_EMOTES = {
+                'PogChamp': '30259', 'Kappa': '25', 'LUL': '425618', 'Kreygasm': '1902',
+                'VoHiYo': '81273', 'SeemsGood': '64138', 'WutFace': '28087', 'MingLee': '68856',
+                'HeyGuys': '30259', 'BibleThump': '86'
+            };
+
+            if (GLOBAL_EMOTES[cleanWord]) {
+                tokens.push({ type: 'emote', id: GLOBAL_EMOTES[cleanWord] });
+            } else {
+                tokens.push({ type: 'text', content: w });
+            }
+        }
+    });
+
+    return tokens;
+}
 
 // --- 0. ส่วนรับข้อมูลจาก Server (Socket) ---
 
@@ -42,22 +95,39 @@ socket.on('game_event', (data) => {
     }
 
     // ✅ 3. กรณีสั่ง update wish (UPDATE_WISH) - เพิ่มใหม่!
+    // ใน socket.on ...
     else if (data.type === 'UPDATE_WISH') {
         const deer = activeReindeers[data.owner];
         if (deer && !deer.destroyed) {
-            // update wish
+            // update data
             deer.wish = data.wish;
+            deer.nameTag.text = data.owner;
 
-            //NO BUBBLE YET BUT I WILL ADD IT LATER
+            // 💬 จัดการ Bubble
+            // 1. ลบอันเก่า (ถ้ามี)
+            if (deer.bubble) {
+                deer.removeChild(deer.bubble);
+                deer.bubble.destroy(); // ทำลายทิ้ง
+                deer.bubble = null;
+            }
 
-            deer.nameTag.text = `${data.owner}\n"${data.wish}"`; // update name tag
+            // 2. สร้างอันใหม่ (ถ้ามีข้อความ)
+            if (data.wish && data.wish !== "") {
+                const newBubble = createChatBubble(data.wish, data.bubbleType, data.emotes);
+
+                // ✅ อย่าลืมแก้ตรงนี้ด้วยให้เท่ากับข้างบน (-35)
+                newBubble.y = -35;
+
+                if (deer.scale.x < 0) newBubble.scale.x = -1;
+
+                deer.addChild(newBubble);
+                deer.bubble = newBubble;
+            }
+
+            // Effect
+            deer.velocityY = -10;
             deer.nameTag.alpha = 1;
             deer.nameTagFadeDelay = 300;
-
-            //EFFECT: Reindeer Jump
-            deer.velocityY = -10;
-
-            console.log('update wish for ' + data.owner);
         }
     }
 });
@@ -321,9 +391,6 @@ async function createReindeer(config) { // ⚠️ เพิ่ม async ตร�
 
     // ✅ แก้ไข: ถ้ามี wish ให้โชว์บรรทัดล่าง ถ้าไม่มีให้โชว์แค่ชื่อ
     let tagText = config.owner;
-    if (config.wish && config.wish !== "") {
-        tagText += `\n"${config.wish}"`;
-    }
 
     const nameTag = new PIXI.Text(tagText, nameStyle); // ใช้ข้อความที่จัดแล้ว
 
@@ -340,6 +407,22 @@ async function createReindeer(config) { // ⚠️ เพิ่ม async ตร�
     reindeer.nameTag = nameTag;
     reindeer.nameTagFadeDelay = 300; // 5 วินาที (60fps * 5)
 
+    // 💬 CHAT BUBBLE SYSTEM
+    // ถ้ามี wish ให้สร้าง Bubble
+    if (config.wish && config.wish !== "") {
+        const bubble = createChatBubble(config.wish, config.bubbleType || 'default', config.emotes);
+
+        // ตำแหน่ง: อยู่เหนือหัวกวาง (ปรับค่า Y ตามความสูงกวาง)
+        // เนื่องจากเรา Scale กวาง x2, ตำแหน่ง -60 ก็น่าจะประมาณ -120 บนจอ
+        bubble.y = -35;
+
+        // อย่าลืม! ถ้ากวางหันซ้าย Bubble ต้องไม่กลับด้านตาม
+        // เดี๋ยวเราไปแก้ Logic ใน tick ให้มันหันหน้าถูกทางตลอด
+
+        reindeer.addChild(bubble);
+        reindeer.bubble = bubble; // เก็บไว้ลบทีหลัง
+    }
+
     // --- Setup Data & State ---
     reindeer.data = config;
     reindeer.startY = startY;
@@ -350,6 +433,8 @@ async function createReindeer(config) { // ⚠️ เพิ่ม async ตร�
     reindeer.targetX = 100 + Math.random() * 1500; // จุดหมายแรก
     reindeer.waitTime = 0;
     reindeer.forceDirection = 0;
+
+
 
     app.stage.addChild(reindeer);
     activeReindeers[config.owner] = reindeer;
@@ -470,6 +555,8 @@ async function createReindeer(config) { // ⚠️ เพิ่ม async ตร�
 
                 if (reindeer.onGoneCallback) reindeer.onGoneCallback();
                 destroyReindeerSprite(reindeer);
+
+                return;
             }
         }
         else if (reindeer.forceDirection !== 0) {
@@ -501,9 +588,14 @@ async function createReindeer(config) { // ⚠️ เพิ่ม async ตร�
             else if (reindeer.x < -buffer) { reindeer.x = screenWidth + buffer; reindeer.state = 'IDLE'; }
         }
 
-        // จัดการ NameTag
-        if (reindeer.scale.x < 0) nameTag.scale.x = -1;
-        else nameTag.scale.x = 1;
+        // จัดการ NameTag และ Bubble
+        if (reindeer.scale.x < 0) {
+            nameTag.scale.x = -1; // กลับด้านชื่อคืน
+            if (reindeer.bubble) reindeer.bubble.scale.x = -1; // ✅ กลับด้าน Bubble คืน
+        } else {
+            nameTag.scale.x = 1;
+            if (reindeer.bubble) reindeer.bubble.scale.x = 1; // ✅
+        }
 
         nameTag.rotation = -reindeer.rotation; // ชื่อตั้งตรงตลอด
     };
@@ -580,6 +672,143 @@ async function loadSpriteSheet(path, frameCount) {
         console.error(`Failed to load ${path}:`, err);
         return null;
     }
+}
+
+// ใน public/script.js
+
+// ใน public/script.js
+
+// ใน public/script.js
+
+function createChatBubble(text, type = 'default', emoteMap = null) { // 👈 รับ emoteMap เพิ่ม
+    const container = new PIXI.Container();
+
+    // 1. Asset & Style
+    const boxTexture = PIXI.Texture.from('/assets/bubble/bubble_box.png');
+    const tailTexture = PIXI.Texture.from('/assets/bubble/bubble_tail.png');
+    boxTexture.baseTexture.scaleMode = PIXI.SCALE_MODES.NEAREST;
+    tailTexture.baseTexture.scaleMode = PIXI.SCALE_MODES.NEAREST;
+
+    let tintColor = 0xFFFFFF;
+    if (type === 'love') tintColor = 0xFFC0CB;
+    else if (type === 'money') tintColor = 0xFFD700;
+    else if (type === 'chaos') tintColor = 0xAB82FF;
+    else if (type === 'food') tintColor = 0xFFA500;
+
+    // 2. Parse Text -> Tokens
+    const tokens = parseMessageWithEmotes(text, emoteMap);
+
+    // 3. 🏗️ Rich Text Layout Engine (สร้าง Container เก็บเนื้อหา)
+    const contentContainer = new PIXI.Container();
+
+    // Config ฟอนต์
+    const fontSize = 16;
+    const lineHeight = 20; // เพิ่มนิดนึงเพื่อให้ Emote หายใจสะดวก
+    const style = new PIXI.TextStyle({
+        fontFamily: '2005_iannnnnAMD',
+        fontSize: fontSize,
+        fill: '#000000',
+    });
+
+    // Config กล่อง
+    const maxWidth = 200; // ความกว้างสูงสุดก่อนขึ้นบรรทัดใหม่
+    let currentX = 0;
+    let currentY = 0;
+
+    // วนลูปสร้างทีละ Token
+    tokens.forEach(token => {
+        if (token.type === 'text') {
+            // แยกเป็นคำๆ เพื่อเช็คบรรทัด (Word Wrap)
+            // ใช้ split แบบเก็บ space เพื่อความสวยงาม
+            const words = token.content.split(/(?=\s)/);
+
+            words.forEach(word => {
+                const wordText = new PIXI.Text(word, style);
+                wordText.resolution = 2;
+                wordText.roundPixels = true;
+
+                // เช็คว่าล้นบรรทัดไหม
+                if (currentX + wordText.width > maxWidth && currentX > 0) {
+                    currentX = 0;
+                    currentY += lineHeight;
+                }
+
+                wordText.x = currentX;
+                wordText.y = currentY + (lineHeight - fontSize) / 2; // จัดกึ่งกลางบรรทัด
+                contentContainer.addChild(wordText);
+                currentX += wordText.width;
+            });
+        }
+        else if (token.type === 'emote') {
+            const texture = loadEmoteTexture(token.id);
+            const sprite = new PIXI.Sprite(texture);
+
+            // ปรับขนาด Emote ให้พอดีบรรทัด (เช่น 24px)
+            const size = 24;
+            sprite.width = size;
+            sprite.height = size;
+
+            // เช็คว่าล้นบรรทัดไหม
+            if (currentX + size > maxWidth && currentX > 0) {
+                currentX = 0;
+                currentY += lineHeight;
+            }
+
+            sprite.x = currentX;
+            sprite.y = currentY - (size - fontSize) / 2 - 2; // ขยับขึ้นนิดนึงให้สวย
+            contentContainer.addChild(sprite);
+            currentX += size + 2; // เว้นช่องไฟหลัง Emote นิดนึง
+        }
+    });
+
+    // 4. คำนวณขนาดกล่องจาก contentContainer
+    const cornerSize = 3;
+    const paddingX = 8;
+    const paddingY = 6; // เพิ่มนิดนึง
+
+    const boxWidth = contentContainer.width + (paddingX * 2);
+    const boxHeight = contentContainer.height + (paddingY * 2);
+
+    // 5. สร้างพื้นหลัง (9-Slice)
+    const box = new PIXI.NineSlicePlane(boxTexture, cornerSize, cornerSize, cornerSize, cornerSize);
+    box.width = boxWidth;
+    box.height = boxHeight;
+    box.tint = tintColor;
+
+    const tail = new PIXI.Sprite(tailTexture);
+    tail.anchor.set(0.5, 0);
+    tail.x = boxWidth / 2;
+    tail.y = boxHeight - 1;
+    tail.tint = tintColor;
+
+    // 6. จัดตำแหน่งเนื้อหา
+    contentContainer.x = paddingX;
+    contentContainer.y = paddingY;
+
+    // 7. ประกอบร่าง
+    container.addChild(box);
+    container.addChild(tail);
+    container.addChild(contentContainer);
+
+    // 8. Pivot & Animation
+    container.pivot.x = boxWidth / 2;
+    container.pivot.y = boxHeight + tail.height;
+
+    container.scale.set(0);
+    let scaleVal = 0;
+    const popTicker = (delta) => {
+        if (container.destroyed) return;
+        scaleVal += (1 - scaleVal) * 0.3 * delta;
+        container.scale.set(scaleVal);
+        if (Math.abs(1 - scaleVal) < 0.01) {
+            container.scale.set(1);
+            app.ticker.remove(popTicker);
+        }
+    };
+    app.ticker.add(popTicker);
+    container.popTicker = popTicker;
+
+    return container;
 }
 
 // --- 🧪 DEV TOOLS: แผงควบคุมการทดสอบ ---
