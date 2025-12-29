@@ -69,30 +69,29 @@ socket.on('command', (data) => {
         });
     }
     else if (data.type === 'RUN_LEFT' || data.type === 'RUN_RIGHT') {
-        // 1. 💾 Snapshot: เก็บข้อมูลกวางทั้งหมดไว้เตรียมเกิดใหม่
-        // (เฉพาะตัวที่ยังไม่ตายและไม่ได้กำลังวิ่งหนีอยู่แล้ว)
+        // 1. Snapshot: เก็บข้อมูลกวาง"ที่ยังอยู่บนจอ"จริงๆ
         respawnQueue = Object.values(activeReindeers)
             .filter(deer => !deer.destroyed && deer.state !== 'LEAVING')
             .map(deer => deer.data);
 
-        // 2. 🏃‍♂️ Evacuate: สั่งทุกตัววิ่งหนี!
+        // 2. สั่งวิ่ง (ไม่ต้องลบจาก activeReindeers ที่นี่ เดี๋ยวให้ destroyReindeerSprite ลบเองตอนพ้นจอ)
         Object.values(activeReindeers).forEach(deer => {
-            deer.state = 'LEAVING'; // เข้าโหมดวิ่งหนี
+            if (deer.state === 'LEAVING') return; // ตัวไหนวิ่งอยู่แล้ว อย่าไปยุ่ง
 
+            deer.state = 'LEAVING';
             if (data.type === 'RUN_LEFT') {
-                deer.forceDirection = -1; // วิ่งซ้าย
-                deer.scale.x = -Math.abs(deer.scale.x); // หันซ้าย
+                deer.forceDirection = -1;
+                deer.scale.x = -Math.abs(deer.scale.x);
             } else {
-                deer.forceDirection = 1; // วิ่งขวา
-                deer.scale.x = Math.abs(deer.scale.x); // หันขวา
+                deer.forceDirection = 1;
+                deer.scale.x = Math.abs(deer.scale.x);
             }
 
-            // ลบออกจาก Active List ทันที (เพื่อให้ Logic การเกิดใหม่ไม่มองว่าซ้ำ)
-            // แต่ตัว Sprite ยังอยู่บนจอจนกว่าจะวิ่งพ้นจอตาม Logic ใน tick
-            delete activeReindeers[deer.data.owner];
+            // 🚨 ลบบรรทัด delete activeReindeers[...] ออก! 
+            // ให้ระบบมันจัดการตามธรรมชาติ เพื่อป้องกัน error การเข้าถึงตัวแปร
         });
 
-        // 3. ⏳ Start Respawn Sequence: เริ่มกระบวนการทยอยเกิดใหม่
+        // 3. เริ่มนับถอยหลังเกิดใหม่
         if (!isRespawning) {
             isRespawning = true;
             processRespawnQueue();
@@ -221,8 +220,7 @@ function createReindeer(config) {
 
         reindeer.animData = {
             idle: [staticTexture],
-            walk: [staticTexture], // เริ่มต้นด้วยรูปนิ่งก่อนโหลดเสร็จ
-            run: [staticTexture]
+            walk: [staticTexture],
         };
 
         const loadAllAnims = async () => {
@@ -328,86 +326,74 @@ function createReindeer(config) {
     app.stage.addChild(reindeer);
     activeReindeers[config.owner] = reindeer;
 
-    // --- Animation Loop ---
+    // --- Animation Loop (ฉบับแก้ไข: ลื่นไหล + ตัดส่วนเกิน) ---
     const tick = (delta) => {
         if (reindeer.destroyed) return;
 
-        // 1. เรียงลำดับความลึก
+        // 1. จัดลำดับความลึก (Z-Index)
         reindeer.zIndex = reindeer.y;
 
-        // 🔄 ระบบเปลี่ยนท่าอัตโนมัติ (Animation State Machine)
-        // ... (ภายใน tick function ของ createReindeer) ...
-
-        // 🔄 ระบบเปลี่ยนท่าอัตโนมัติ
+        // ------------------------------------------------------------------
+        // 🎞️ A. ส่วนจัดการอนิเมชั่น (บังคับใช้ Walk ตลอดกาล เพื่อความลื่น)
+        // ------------------------------------------------------------------
         if (reindeer.animData) {
+            // ค่า Default
             let targetAnim = reindeer.animData.idle;
+            let targetAnimSpeed = 0.05;
 
-            // เลือกท่าตามสถานะ
-            if (reindeer.state === 'WALK' || reindeer.state === 'ENTERING') {
-                targetAnim = reindeer.animData.walk;
-            } else if (reindeer.state === 'LEAVING') {
-                targetAnim = reindeer.animData.run || reindeer.animData.walk; // ถ้ายังไม่มีท่ารัน ให้ใช้ท่าเดินแทน
-            } else {
-                targetAnim = reindeer.animData.idle;
+            // เช็คสถานะ: ถ้าเดิน, เข้าฉาก, หรือวิ่งหนี -> ใช้ท่า WALK ทั้งหมด
+            if (reindeer.state === 'WALK' || reindeer.state === 'ENTERING' || reindeer.state === 'LEAVING') {
+
+                // กันเหนียว: ถ้าไม่มีท่า Walk ให้ใช้ Idle แทน (กัน Error)
+                targetAnim = reindeer.animData.walk || reindeer.animData.idle;
+
+                // ปรับความเร็วขา (Animation Speed)
+                if (reindeer.state === 'LEAVING') {
+                    targetAnimSpeed = 0.2;  // วิ่งหนี: ซอยขาเร็วๆ
+                } else {
+                    targetAnimSpeed = 0.1;  // เดินปกติ: ซอยขานุ่มๆ
+                }
             }
 
-            // ถ้าท่าเปลี่ยน ให้สลับ Textures ทันที
-            if (reindeer.textures !== targetAnim && targetAnim.length > 1) {
+            // สลับรูป (Switch Texture) แค่ครั้งเดียวตอนเปลี่ยนท่า
+            if (targetAnim && targetAnim.length > 0 && reindeer.textures !== targetAnim) {
                 reindeer.textures = targetAnim;
-
-                // ปรับความเร็วตามท่า
-                if (reindeer.state === 'ENTERING' || reindeer.state === 'WALK') {
-                    reindeer.animationSpeed = 0.12; // ความเร็วเดินนุ่มๆ
-                } else {
-                    reindeer.animationSpeed = 0.08; // ความเร็ว IDLE ชิลล์ๆ
-                }
-
                 reindeer.play();
             }
+
+            // อัปเดตความเร็วขา
+            reindeer.animationSpeed = targetAnimSpeed;
         }
 
-        // 2. Physics & Gravity Control
-        if (reindeer.isZeroGravity) {
-            // 🚀 โหมดอวกาศ (แก้ไขใหม่)
+        // ------------------------------------------------------------------
+        // 🏃‍♂️ B. ส่วนการเคลื่อนที่ (Physics & Movement)
+        // ------------------------------------------------------------------
 
-            // เคลื่อนที่เร็ว (ตามค่า drift ที่ตั้งไว้)
+        // 1. แรงโน้มถ่วง / ลอยตัว (Zero Gravity)
+        if (reindeer.isZeroGravity) {
             reindeer.x += (reindeer.driftX || 0) * delta;
             reindeer.y += (reindeer.driftY || 0) * delta;
 
-            // ✨ ความนุ่ม: ใส่ Sine Wave เบาๆ ซ้อนเข้าไป
+            // Sine Wave นุ่มๆ
             const floatY = Math.sin((Date.now() / 600) + reindeer.floatOffset) * 0.5;
             reindeer.y += floatY * delta;
 
-            // หมุนตัว
             reindeer.rotation += (reindeer.rotSpeed || 0) * delta;
 
-            // 🛡️ ระบบกำแพงกั้น (กันหลุดจอ)
-            const topLimit = -100; // ขอบบน (เผื่อเขานิดนึง)
-            const floorLimit = reindeer.startY; // ขอบล่าง (ห้ามต่ำกว่าพื้นเดิม)
-
-            // ⬆️ เช็คขอบบน: ถ้าลอยสูงเกิน ให้ดึงกลับมาแล้วเด้งลง
-            if (reindeer.y < topLimit) {
-                reindeer.y = topLimit;
-                reindeer.driftY = Math.abs(reindeer.driftY); // บังคับค่าบวก (ลง)
-            }
-
-            // ⬇️ เช็คขอบล่าง: ถ้าลอยต่ำกว่าพื้น ให้ดึงกลับมาที่พื้นแล้วเด้งขึ้น
-            // (อันนี้สำคัญมาก กันจมดินตอนจบ)
-            if (reindeer.y > floorLimit) {
-                reindeer.y = floorLimit;
-                reindeer.driftY = -Math.abs(reindeer.driftY); // บังคับค่าลบ (ขึ้น)
-            }
+            // กันหลุดขอบบน-ล่าง
+            const topLimit = -100;
+            const floorLimit = reindeer.startY;
+            if (reindeer.y < topLimit) { reindeer.y = topLimit; reindeer.driftY = Math.abs(reindeer.driftY); }
+            if (reindeer.y > floorLimit) { reindeer.y = floorLimit; reindeer.driftY = -Math.abs(reindeer.driftY); }
         }
         else {
-            // 🌏 โหมดปกติ: ใช้แรงโน้มถ่วงโลก
+            // โหมดปกติ: แรงโน้มถ่วง
+            if (reindeer.rotation !== 0) reindeer.rotation = 0; // รีเซ็ตมุม
 
-            // รีเซ็ตมุมให้กลับมาตั้งตรง (เผื่อเพิ่งลงมาจากอวกาศ)
-            if (reindeer.rotation !== 0) reindeer.rotation = 0;
-
-            // Logic แรงโน้มถ่วงเดิมของคุณ
             if (reindeer.velocityY !== 0 || reindeer.y < reindeer.startY) {
                 reindeer.y += reindeer.velocityY * delta;
-                reindeer.velocityY += 0.8 * delta;
+                reindeer.velocityY += 0.8 * delta; // Gravity
+
                 if (reindeer.y > reindeer.startY) {
                     reindeer.y = reindeer.startY;
                     reindeer.velocityY = 0;
@@ -415,41 +401,32 @@ function createReindeer(config) {
             }
         }
 
-        // 3. State Machine Control (สมองกล) 
-        // (ยังคงทำงานต่อเพื่อให้ขากวางขยับดุ๊กดิ๊กแม้จะลอยอยู่)
-        if (reindeer.forceDirection !== 0) {
-            // โดนสั่ง (Command)
-            const runSpeed = 8;
-            reindeer.x += reindeer.forceDirection * runSpeed * delta;
-        }
-        else if (reindeer.state === 'ENTERING') {
+        // 2. การเคลื่อนที่ตามสถานะ (State Movement)
+        if (reindeer.state === 'ENTERING') {
             // 🟢 เดินเข้าฉาก
-            const speed = 2;
-            reindeer.x += speed * delta;
-            reindeer.scale.x = Math.abs(reindeer.scale.x);
+            reindeer.x += 2 * delta; // ความเร็วคงที่ (2)
+            reindeer.scale.x = Math.abs(reindeer.scale.x); // หันขวา
 
             if (reindeer.x >= reindeer.targetX) {
                 reindeer.state = 'IDLE';
                 reindeer.waitTime = 30;
             }
-            // ตอนเดินเข้า ให้โชว์ชื่อตลอด
             nameTag.alpha = 1;
         }
         else if (reindeer.state === 'LEAVING') {
-            // 🔴 วิ่งออกจากฉาก (เร็วๆ)
+            // 🔴 วิ่งออกจากฉาก (กลับมาใช้แบบ Linear ไม่มีการเร่งเครื่อง)
             nameTag.alpha = 1;
-            const runSpeed = 12;
 
-            // วิ่งตามทิศที่ถูกสั่ง (forceDirection)
+            const runSpeed = 10; // ความเร็วคงที่ (ปรับลดจาก 12 เพื่อความนุ่ม)
             const dir = reindeer.forceDirection || 1;
 
             reindeer.x += dir * runSpeed * delta;
 
-            // หันหน้าตามทิศที่วิ่ง
+            // หันหน้าตามทิศ
             if (dir > 0) reindeer.scale.x = Math.abs(reindeer.scale.x);
             else reindeer.scale.x = -Math.abs(reindeer.scale.x);
 
-            // เช็คว่าพ้นจอหรือยัง (เช็คทั้ง 2 ฝั่ง)
+            // เช็คพ้นจอ (Check Out of Bounds)
             const isGoneRight = (dir > 0 && reindeer.x > 2100);
             const isGoneLeft = (dir < 0 && reindeer.x < -300);
 
@@ -458,50 +435,40 @@ function createReindeer(config) {
                 destroyReindeerSprite(reindeer);
             }
         }
+        else if (reindeer.forceDirection !== 0) {
+            // กรณีโดนสั่งแต่ไม่ได้เข้า state LEAVING (เผื่อไว้)
+            reindeer.x += reindeer.forceDirection * 8 * delta;
+        }
         else {
             // 🔵 เดินเล่นปกติ (Wander)
             updateWanderBehavior(reindeer, delta);
 
-            // ✨ Logic การจางของชื่อ (ทำงานเฉพาะตอนเดินเล่น)
+            // Fade ชื่อ
             if (reindeer.nameTagFadeDelay > 0) {
                 reindeer.nameTagFadeDelay -= delta;
-                nameTag.alpha = 1; // ยังไม่หมดเวลาก็โชว์ชัดๆ
-            } else {
-                // หมดเวลาแล้ว ให้ค่อยๆ จาง
-                if (nameTag.alpha > 0) {
-                    nameTag.alpha -= 0.02 * delta;
-                }
+                nameTag.alpha = 1;
+            } else if (nameTag.alpha > 0) {
+                nameTag.alpha -= 0.02 * delta;
             }
         }
 
-        // 4. วาร์ป (Screen Wrapping)
-        // (ทำงานเฉพาะตอนไม่ได้วิ่งหนี ไม่ได้เดินเข้า และ *ไม่ได้ลอยอยู่*)
-        // เพิ่มเงื่อนไข !reindeer.isZeroGravity เข้าไป กันมันวาร์ปตอนลอย
+        // ------------------------------------------------------------------
+        // 📺 C. ส่วนจัดการหน้าจอ (Screen Wrap & UI)
+        // ------------------------------------------------------------------
+
+        // วาร์ปข้ามจอ (ทำงานเฉพาะตอนไม่ได้ลอย และไม่ได้กำลังเข้า/ออก)
         if (reindeer.state !== 'LEAVING' && reindeer.state !== 'ENTERING' && !reindeer.isZeroGravity) {
             const screenWidth = 1920;
             const buffer = 50;
-
-            if (reindeer.x > screenWidth + buffer) {
-                reindeer.x = -buffer;
-                reindeer.state = 'IDLE';
-                reindeer.waitTime = 10;
-                reindeer.scale.x = Math.abs(reindeer.scale.x);
-            }
-            else if (reindeer.x < -buffer) {
-                reindeer.x = screenWidth + buffer;
-                reindeer.state = 'IDLE';
-                reindeer.waitTime = 10;
-                reindeer.scale.x = -Math.abs(reindeer.scale.x);
-            }
+            if (reindeer.x > screenWidth + buffer) { reindeer.x = -buffer; reindeer.state = 'IDLE'; }
+            else if (reindeer.x < -buffer) { reindeer.x = screenWidth + buffer; reindeer.state = 'IDLE'; }
         }
 
-        // 5. กันชื่อกลับด้าน
-        // (และกันชื่อหมุนตามตัวกวางตอนลอย)
+        // จัดการ NameTag
         if (reindeer.scale.x < 0) nameTag.scale.x = -1;
         else nameTag.scale.x = 1;
 
-        // ✅ เพิ่ม: ให้ชื่อตั้งตรงตลอดเวลา แม้ตัวกวางจะหมุนติ้ว
-        nameTag.rotation = -reindeer.rotation;
+        nameTag.rotation = -reindeer.rotation; // ชื่อตั้งตรงตลอด
     };
 
     reindeer.tickFunction = tick;
@@ -579,64 +546,94 @@ async function loadSpriteSheet(path, frameCount) {
     }
 }
 
-// --- 🧪 Real-World Simulator Test Button ---
-document.getElementById('test-btn').addEventListener('click', () => {
-    // ข้อมูลจำลอง (เหมือนเดิมที่คุณมี)
-    const realDataSample = [
-        { owner: "Riikame_", wish: "อยากมีคนเลี้ยงไอติมมิ้นช็อคชิพทุกวัน" },
-        { owner: "Chanamnom", wish: "ขอให้มีหมูกระทะหล่นมาจากฟ้า" },
-        { owner: "Oolong_BrownSugar", wish: "ขอให้ผมได้เพรชสีชมพู" },
-        { owner: "Misaki_SakiZ", wish: "สาธุ99 ขอให้ไม่หลุดเรทเกมกาชา" },
-        { owner: "RikoPrushka", wish: "ขอให้ความรักมีแต่ความสุขใจ" },
-        { owner: "ultimatealpaca_", wish: "ขอให้มีลุงหล่อๆโสดๆเข้มๆเท่ๆ" },
-        { owner: "scarecrow_vpk", wish: "ลาก่อน laptop พอดีพี่จ๋า ไม่ทำงานแล้ว" },
-        { owner: "Nutty1999x20", wish: "ขอให้ไม่โดนบิด" },
-        { owner: "AreyouArguide", wish: "ขอให้กระทงนี้อยู่ยงคงกระพัน" },
-        { owner: "Extern_ton", wish: "ขอให้พระแม่คงคาดลบรรดาลให้มีความสุข" }
-    ];
+// --- 🧪 DEV TOOLS: แผงควบคุมการทดสอบ ---
 
-    const randomUser = realDataSample[Math.floor(Math.random() * realDataSample.length)];
+function createTestPanel() {
+    // สร้างกล่องเครื่องมือมุมจอ
+    const panel = document.createElement('div');
+    panel.style.cssText = "position: fixed; top: 10px; left: 10px; z-index: 9999; background: rgba(0,0,0,0.7); padding: 10px; border-radius: 8px; color: white; font-family: sans-serif; display: flex; flex-direction: column; gap: 5px;";
 
-    const analyzeSim = (text) => {
-        const t = text.toLowerCase();
-        if (/เงิน|รวย|หวย|กาชา|เกลือ|เรท|เพชร|โชค|divine|สาธุ/.test(t)) return 'money';
-        if (/รัก|แฟน|หัวใจ|ชอบ|โสด|แต่งงาน|love|heart/.test(t)) return 'love';
-        if (/กิน|อร่อย|หิว|หมูกระทะ|ชาบู|ข้าว|ขนม|น้ำเงี้ยว|มิ้นช็อค|ไก่/.test(t)) return 'food';
-        if (/ผี|บิด|ปวดหลัง|นอน|งาน|ทุบ|สยอง|ตาย|laptop|ghost/.test(t)) return 'chaos';
-        return 'default';
+    // หัวข้อ
+    const title = document.createElement('div');
+    title.innerText = "🦌 Reindeer Debugger";
+    title.style.fontWeight = "bold";
+    title.style.marginBottom = "5px";
+    panel.appendChild(title);
+
+    // ฟังก์ชันสร้างปุ่ม
+    const addBtn = (label, color, onClick) => {
+        const btn = document.createElement('button');
+        btn.innerText = label;
+        btn.style.cssText = `cursor: pointer; background: ${color}; border: none; padding: 5px 10px; color: white; border-radius: 4px; font-size: 12px;`;
+        btn.onclick = onClick;
+        panel.appendChild(btn);
     };
 
-    const rarityPool = [
-        ...Array(50).fill('Common'),
-        ...Array(30).fill('Uncommon'),
-        ...Array(15).fill('Rare'),
-        ...Array(4).fill('Epic'),
-        'Mythic'
-    ];
-    const r = rarityPool[Math.floor(Math.random() * rarityPool.length)];
+    // 1. ปุ่มเสก Common (เช็คท่าเดิน)
+    addBtn("🟢 Spawn Common (Walk Test)", "#2ecc71", () => {
+        spawnTestDeer('Common');
+    });
 
+    // 2. ปุ่มเสก Rare (เช็คเอฟเฟคหิมะ)
+    addBtn("❄️ Spawn Rare (Snow)", "#3498db", () => {
+        spawnTestDeer('Rare');
+    });
+
+    // 3. ปุ่มเสก Mythic (เช็ค RGB)
+    addBtn("🌈 Spawn Mythic (RGB)", "#9b59b6", () => {
+        spawnTestDeer('Mythic');
+    });
+
+    // 4. ปุ่ม Run Left (เช็คบัคค้าง)
+    addBtn("🏃‍♂️ Run Left", "#e67e22", () => {
+        console.log("🧪 Testing Run Left...");
+        // จำลองข้อมูลเหมือนส่งมาจาก Server เป๊ะๆ
+        const socketData = { type: 'RUN_LEFT' };
+
+        // เรียกใช้ logic เดียวกับที่รับจาก socket (ต้องแก้โค้ด socket ให้แยกฟังก์ชัน handleCommand ออกมาจะดีมาก)
+        // แต่เพื่อความง่าย เราจะ emit event ปลอมๆ เข้า socket client เลย
+        socket.io.engine.emit('packet', { type: 2, data: ['command', socketData], nsp: '/' });
+        // หมายเหตุ: บรรทัดบนเป็นการ Hack Socket นิดหน่อย ถ้าไม่ได้ผล ให้ใช้วิธีเรียกฟังก์ชันตรงๆ แทน
+
+        // วิธีสำรอง: เรียกผ่านตัวแปร global (ถ้าเราแยกฟังก์ชันไว้)
+        // หรือจะก๊อป logic มาเทสตรงนี้ก็ได้ แต่แนะนำให้ลองกดผ่าน Twitch จริงๆ ด้วย
+        alert("กดปุ่มนี้อาจจะไม่เหมือนจริง 100% แนะนำให้พิมพ์ !reindeer run left ในแชท Twitch ดีกว่าครับ");
+    });
+
+    // 5. ปุ่ม Clear All
+    addBtn("❌ Kill All", "#c0392b", () => {
+        Object.values(activeReindeers).forEach(deer => destroyReindeerSprite(deer));
+        // เคลียร์ค่าใน Object ด้วย
+        for (let key in activeReindeers) delete activeReindeers[key];
+    });
+
+    document.body.appendChild(panel);
+}
+
+// ฟังก์ชันช่วยเสก (Helper)
+function spawnTestDeer(rarity) {
     const imageMap = {
         'Common': 'texture_0.png',
-        'Uncommon': 'texture_1.png',
         'Rare': 'texture_2.png',
-        'Epic': 'texture_3.png',
         'Mythic': 'texture_4.png'
     };
 
-    let behavior = 'normal';
-    if (r === 'Mythic' || r === 'Epic') behavior = 'energetic';
-    else if (r === 'Uncommon') behavior = 'shy';
+    // สุ่มชื่อและคำขอ
+    const wishes = ["เดินสวยไหม?", "เทสๆ 123", "ขอกินขนมหน่อย", ""];
+    const randomWish = wishes[Math.floor(Math.random() * wishes.length)];
 
-    const simulatedPayload = {
-        owner: randomUser.owner,
-        wish: randomUser.wish,
-        rarity: r,
-        image: imageMap[r],
-        behavior: behavior,
-        bubbleType: analyzeSim(randomUser.wish),
-        isNewYear: false
+    const payload = {
+        owner: `TestUser_${Math.floor(Math.random() * 1000)}`,
+        wish: randomWish,
+        rarity: rarity,
+        image: imageMap[rarity] || 'texture_0.png',
+        bubbleType: randomWish ? 'default' : 'none',
+        behavior: 'normal'
     };
 
-    console.log(`🧪 Simulation: ${randomUser.owner} (${r})`);
-    handleSpawnLogic(simulatedPayload);
-});
+    console.log(`🧪 Spawning ${rarity}...`);
+    handleSpawnLogic(payload);
+}
+
+// เรียกสร้างปุ่มทันที
+createTestPanel();
