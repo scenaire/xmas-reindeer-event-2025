@@ -1,122 +1,120 @@
-import fs from 'fs-extra';
+import { dataManager } from './DataManager.js';
 
-const GACHA_HISTORY_PATH = './data/gachaHistory.json';
-
+/**
+ * GachaManager - ผู้ดูแลระบบสุ่มกวางและคำนวณ Pity
+ * ออกแบบมาให้รองรับระบบ Soft Pity และ Hard Pity ตามหลัก Game Theory ค่ะ
+ */
 export class GachaManager {
     constructor() {
-        this.ensureHistoryFile();
+        // ตั้งค่าโอกาสดรอปและลิมิตการันตี (Configurable)
+        this.CONFIG = {
+            FIVE_STAR: {
+                BASE_RATE: 0.01,    // 1%
+                SOFT_PITY: 36,      // เริ่มเพิ่มเรทที่โรลที่ 36
+                HARD_PITY: 50,      // การันตีที่โรลที่ 50
+                INCREMENT: 0.06     // เพิ่มโอกาสทีละ 6% ช่วง Soft Pity
+            },
+            FOUR_STAR: {
+                BASE_RATE: 0.10,    // 10%
+                HARD_PITY: 10       // การันตีทุก 10 โรล
+            }
+        };
     }
 
-    ensureHistoryFile() {
-        if (!fs.existsSync(GACHA_HISTORY_PATH)) {
-            fs.outputJsonSync(GACHA_HISTORY_PATH, {});
-        }
-    }
-
-    getHistory() {
-        try {
-            return fs.readJsonSync(GACHA_HISTORY_PATH);
-        } catch (error) {
-            return {};
-        }
-    }
-
-    saveHistory(history) {
-        fs.writeJsonSync(GACHA_HISTORY_PATH, history, { spaces: 2 });
-    }
-
+    /**
+     * สุ่มกวางให้ผู้เล่น
+     * @param {string} userName 
+     */
     roll(userName) {
-        const history = this.getHistory();
+        const history = dataManager.getGachaHistory();
         const userKey = userName.toLowerCase();
 
-        // 1. โหลดข้อมูล Pity ของ user (ถ้าไม่มีให้เริ่มใหม่)
+        // 1. ดึงข้อมูลผู้เล่นเดิมหรือสร้างใหม่
         let userData = history[userKey] || { pity4: 0, pity5: 0, totalRolls: 0 };
 
         userData.pity4++;
         userData.pity5++;
         userData.totalRolls++;
 
-        let resultRarity = "";
-        let resultImage = "";
+        let result = null;
 
-        // --- 🌟 STEP 1: เช็คระดับ 5 ดาว (Mythic) ---
-        // Base Rate: 1%
-        // Soft Pity Start: 36 (เพิ่มโอกาสขึ้นเรื่อยๆ)
-        // Hard Pity: 50 (การันตี 100%)
-
-        let rate5 = 0.01; // 1%
-        if (userData.pity5 >= 50) rate5 = 1.0; // Hard Pity
-        else if (userData.pity5 >= 36) {
-            // Soft Pity Curve: เพิ่มทีละ 6% ตั้งแต่โรลที่ 36
-            // 36=20%, 37=26%, ... 49=98%
-            rate5 = 0.2 + ((userData.pity5 - 36) * 0.06);
+        // 2. คำนวณหาผลลัพธ์ (Check 5-star -> Check 4-star -> Default 3-star)
+        if (this.isFiveStarHit(userData.pity5)) {
+            result = this.getFiveStarResult();
+            userData.pity5 = 0; // Reset Pity 5 ดาว
         }
-
-        if (Math.random() < rate5) {
-            // 🎉 JACKPOT! ได้ 5 ดาว
-            resultRarity = "Mythic";
-            resultImage = "texture_4.png";
-
-            userData.pity5 = 0; // รีเซ็ตตัวนับ 5 ดาว
-            // (ป.ล. ในเกมส่วนใหญ่ ถ้าได้ 5 ดาว ตัวนับ 4 ดาวจะไม่รีเซ็ตนะ)
+        else if (this.isFourStarHit(userData.pity4)) {
+            result = this.getFourStarResult();
+            userData.pity4 = 0; // Reset Pity 4 ดาว
         }
-
-        // --- 🟣 STEP 2: ถ้าไม่ได้ 5 ดาว.. เช็คระดับ 4 ดาว (Rare/Epic) ---
-        // Base Rate: 10%
-        // Hard Pity: 10 (การันตี 100%)
         else {
-            let rate4 = 0.10; // 10%
-            if (userData.pity4 >= 10) rate4 = 1.0; // Hard Pity
-
-            if (Math.random() < rate4) {
-                // 🎉 ได้ 4 ดาว (สุ่มระหว่าง Epic กับ Rare 50/50)
-                const isEpic = Math.random() < 0.5;
-                if (isEpic) {
-                    resultRarity = "Epic";
-                    resultImage = "texture_3.png";
-                } else {
-                    resultRarity = "Rare";
-                    resultImage = "texture_2.png";
-                }
-
-                userData.pity4 = 0; // รีเซ็ตตัวนับ 4 ดาว
-            }
-
-            // --- 🟦 STEP 3: ถ้าไม่ได้อะไรเลย.. เอา 3 ดาวไป (Common/Uncommon) ---
-            else {
-                const isUncommon = Math.random() < 0.5;
-                if (isUncommon) {
-                    resultRarity = "Uncommon";
-                    resultImage = "texture_1.png";
-                } else {
-                    resultRarity = "Common";
-                    resultImage = "texture_0.png";
-                }
-                // (ไม่ต้องรีเซ็ต Pity อะไรทั้งนั้น ฟาร์มต่อไป!)
-            }
+            result = this.getThreeStarResult();
         }
 
-        // บันทึกสถานะล่าสุดกลับลงไฟล์
+        // 3. บันทึกประวัติและส่งผลลัพธ์กลับ
         history[userKey] = userData;
-        this.saveHistory(history);
+        dataManager.saveGachaHistory(history);
 
-        console.log(`🎰 ${userName} Rolled: [${resultRarity}] (Pity5: ${userData.pity5}, Pity4: ${userData.pity4})`);
+        console.log(`🎰 [Gacha] ${userName} rolled: ${result.rarity} (Pity5: ${userData.pity5}, Pity4: ${userData.pity4})`);
 
         return {
-            rarity: resultRarity,
-            image: resultImage,
-            behavior: this.getBehavior(resultRarity),
-            pity4: userData.pity4, // ส่งกลับไปโชว์หน้าจอได้
-            pity5: userData.pity5, // ส่งกลับไปโชว์หน้าจอได้
+            ...result,
+            behavior: this.getBehavior(result.rarity),
+            pity4: userData.pity4,
+            pity5: userData.pity5,
             totalRolls: userData.totalRolls
         };
     }
 
+    // --- Logic คำนวณดวง ---
+
+    isFiveStarHit(pity) {
+        const { BASE_RATE, SOFT_PITY, HARD_PITY, INCREMENT } = this.CONFIG.FIVE_STAR;
+
+        if (pity >= HARD_PITY) return true;
+
+        let currentRate = BASE_RATE;
+        if (pity >= SOFT_PITY) {
+            // สูตรคำนวณ Soft Pity: 36=20%, 37=26%...
+            currentRate = 0.2 + ((pity - SOFT_PITY) * INCREMENT);
+        }
+
+        return Math.random() < currentRate;
+    }
+
+    isFourStarHit(pity) {
+        const { BASE_RATE, HARD_PITY } = this.CONFIG.FOUR_STAR;
+        if (pity >= HARD_PITY) return true;
+        return Math.random() < BASE_RATE;
+    }
+
+    // --- Logic การเลือกของรางวัล ---
+
+    getFiveStarResult() {
+        return { rarity: "Mythic", image: "texture_4.png" };
+    }
+
+    getFourStarResult() {
+        const isEpic = Math.random() < 0.5;
+        return isEpic
+            ? { rarity: "Epic", image: "texture_3.png" }
+            : { rarity: "Rare", image: "texture_2.png" };
+    }
+
+    getThreeStarResult() {
+        const isUncommon = Math.random() < 0.5;
+        return isUncommon
+            ? { rarity: "Uncommon", image: "texture_1.png" }
+            : { rarity: "Common", image: "texture_0.png" };
+    }
+
     getBehavior(rarity) {
-        // กำหนดนิสัยตามระดับ (Optional)
-        if (rarity === "Mythic") return "glowing";
-        if (rarity === "Epic") return "brave";
-        if (rarity === "Rare") return "shy";
-        return "normal";
+        const behaviors = {
+            'Mythic': 'glowing',
+            'Epic': 'brave',
+            'Rare': 'shy',
+            'default': 'normal'
+        };
+        return behaviors[rarity] || behaviors.default;
     }
 }
