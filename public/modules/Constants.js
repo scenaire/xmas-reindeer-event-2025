@@ -21,27 +21,39 @@ export const CONFIG = {
     // --- 🎨 Visuals & Scales ---
     SCALES: {
         'Common': 2.0,
-        'Uncommon': 2.1,
+        'Uncommon': 2.0,
         'Rare': 2.2,
-        'Epic': 2.3,
-        'Mythic': 2.5 // กวางแรร์ตัวใหญ่กว่าเพื่อนค่ะ
+        'Epic': 2.2,
+        'Mythic': 2.2
     },
 
     // --- ⏳ Timings (Milliseconds) ---
     WISH_DURATION: 15000,    // ข้อความขอพรค้างไว้ 15 วินาที
     DESPAWN_TIME: 3600000,   // กวางจะหายไปหลังจาก 1 ชั่วโมง (ถ้าอยากให้ค้างไว้นานๆ)
 
+    // --- 🎨 Animation Settings ---
+    ANIMATION: {
+        FRAME_COUNT: 6, // แก้จาก 4 เป็น 6 ตามที่คุณ Nair บอกค่ะ
+        FRAME_WIDTH: 48,
+        FRAME_HEIGHT: 48,
+        SPEED: 0.8
+    },
+
+    // --- 🎨 Name Display Time --- (5000ms = 5 seconds)
+    NAME_DISPLAY_DURATION: 5000,
+
     // --- 📂 Asset Paths ---
     ASSETS: {
         BASE_PATH: './assets/',
         BUBBLE_BOX: './assets/bubble/bubble_box.png',
         BUBBLE_TAIL: './assets/bubble/bubble_tail.png',
+        // รายชื่อไฟล์ที่มีอยู่จริง (ตอนนี้ใช้ texture_0 เป็นหลักไปก่อนค่ะ)
         TEXTURES: {
-            'Common': 'texture_0.png',
-            'Uncommon': 'texture_1.png',
-            'Rare': 'texture_2.png',
-            'Epic': 'texture_3.png',
-            'Mythic': 'texture_4.png'
+            'Common': 'texture_0',
+            'Uncommon': 'texture_0', // Fallback ไปใช้ 0 ก่อนเพราะยังวาดไม่เสร็จ
+            'Rare': 'texture_0',
+            'Epic': 'texture_0',
+            'Mythic': 'texture_0'
         }
     }
 };

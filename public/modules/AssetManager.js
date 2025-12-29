@@ -1,83 +1,88 @@
 import { CONFIG } from './Constants.js';
 
-/**
- * AssetManager - ผู้ดูแลเสบียงและเสื้อผ้าของน้องกวาง
- * ทำหน้าที่โหลดรูปภาพและเตรียมเฟรมอนิเมชั่นล่วงหน้า เพื่อความลื่นไหลระดับ 60 FPS ค่ะ!
- */
 export class AssetManager {
     constructor() {
         this.cache = new Map();
     }
 
-    /**
-     * เริ่มต้นการโหลดทรัพยากรทั้งหมด
-     */
     async init() {
-        console.log("🎨 [AssetManager] กำลังเตรียมชุดคริสต์มาสให้น้องกวาง...");
+        console.log("🎨 [AssetManager] Start loading...");
+        await this.loadUI(); // โหลด Bubble
 
+        // 1. โหลดตัวหลัก (Common / texture_0) ให้ได้ก่อน
+        // ถ้าตัวนี้โหลดไม่ได้ คือจบเห่ เราต้องรู้ทันที
         try {
-            // 1. โหลด textures ของกวางแต่ละระดับ (แยก Idle และ Walk)
-            const reindeerPromises = Object.entries(CONFIG.ASSETS.TEXTURES).map(async ([rarity, fileName]) => {
-                const baseName = fileName.replace('.png', '');
+            const commonIdle = await PIXI.Assets.load(CONFIG.ASSETS.BASE_PATH + 'texture_0_idle.png');
+            const commonWalk = await PIXI.Assets.load(CONFIG.ASSETS.BASE_PATH + 'texture_0_walk.png');
 
-                const [idleSheet, walkSheet] = await Promise.all([
-                    PIXI.Assets.load(`${CONFIG.ASSETS.BASE_PATH}${baseName}_idle.png`),
-                    PIXI.Assets.load(`${CONFIG.ASSETS.BASE_PATH}${baseName}_walk.png`)
-                ]);
+            const commonSet = {
+                idle: this.splitFrames(commonIdle, 6),
+                walk: this.splitFrames(commonWalk, 6)
+            };
+            this.cache.set('Common', commonSet);
+            console.log("✅ Base Texture Loaded!");
 
-                // ตัดแบ่งเฟรม (โค้ดเดิมใช้ 4 เฟรมต่อหนึ่งแถวค่ะ)
-                this.cache.set(rarity, {
-                    idle: this.splitFrames(idleSheet, 4),
-                    walk: this.splitFrames(walkSheet, 4)
-                });
-            });
+            // 2. พยายามโหลดตัวอื่นๆ (1-4)
+            const rarities = ['Uncommon', 'Rare', 'Epic', 'Mythic'];
+            for (let i = 0; i < rarities.length; i++) {
+                const index = i + 1; // texture_1, texture_2...
+                try {
+                    // ใช้ Promise.all เพื่อโหลดคู่
+                    const [idle, walk] = await Promise.all([
+                        PIXI.Assets.load(`${CONFIG.ASSETS.BASE_PATH}texture_${index}_idle.png`),
+                        PIXI.Assets.load(`${CONFIG.ASSETS.BASE_PATH}texture_${index}_walk.png`)
+                    ]);
 
-            // 2. โหลดรูปภาพประกอบอื่นๆ (Bubble, UI)
-            const uiPromises = [
-                PIXI.Assets.load(CONFIG.ASSETS.BUBBLE_BOX).then(t => this.cache.set('bubbleBox', t)),
-                PIXI.Assets.load(CONFIG.ASSETS.BUBBLE_TAIL).then(t => this.cache.set('bubbleTail', t))
-            ];
+                    this.cache.set(rarities[i], {
+                        idle: this.splitFrames(idle, 6),
+                        walk: this.splitFrames(walk, 6)
+                    });
+                } catch (err) {
+                    console.warn(`⚠️ Load failed for ${rarities[i]}, using Common.`);
+                    // ถ้าโหลดไม่เจอ ให้ใช้ Common แทนทันที
+                    this.cache.set(rarities[i], commonSet);
+                }
+            }
 
-            await Promise.all([...reindeerPromises, ...uiPromises]);
-            console.log("✅ [AssetManager] โหลดของเสร็จหมดแล้ว พร้อมลุยสตรีมแล้วค่ะคุณ Nair!");
-        } catch (error) {
-            console.error("❌ [AssetManager] เกิดข้อผิดพลาดในการโหลดรูป:", error);
+        } catch (criticalError) {
+            console.error("❌ CRITICAL: Cannot load texture_0 (Base texture)!", criticalError);
         }
     }
 
-    /**
-     * Helper สำหรับตัดแบ่ง Texture เป็นเฟรมๆ สำหรับ AnimatedSprite
-     */
     splitFrames(texture, frameCount) {
+        if (!texture) return [PIXI.Texture.WHITE]; // กันตาย
+
         const frames = [];
         const frameWidth = texture.width / frameCount;
         const frameHeight = texture.height;
 
         for (let i = 0; i < frameCount; i++) {
-            const frame = new PIXI.Texture(
-                texture.baseTexture,
-                new PIXI.Rectangle(i * frameWidth, 0, frameWidth, frameHeight)
-            );
-            frames.push(frame);
+            const rect = new PIXI.Rectangle(i * frameWidth, 0, frameWidth, frameHeight);
+            frames.push(new PIXI.Texture(texture.baseTexture, rect));
         }
         return frames;
     }
 
-    /**
-     * ดึงเฟรมอนิเมชั่นตาม Rarity และประเภท
-     */
-    getAnimation(rarity, type = 'idle') {
+    getAnimation(rarity, type) {
+        // พยายามหาตาม Rarity ก่อน ถ้าไม่มีเอา Common
         const set = this.cache.get(rarity) || this.cache.get('Common');
+
+        // ถ้ายังไม่มีอีก (กรณี Base โหลดไม่ติด) ส่งภาพเปล่ากัน Error
+        if (!set || !set[type]) return [PIXI.Texture.WHITE];
+
         return set[type];
     }
 
-    /**
-     * ดึง Texture ของ Bubble
-     */
+    // ... loadUI / getBubbleAssets เหมือนเดิม
+    async loadUI() {
+        const [box, tail] = await Promise.all([
+            PIXI.Assets.load(CONFIG.ASSETS.BUBBLE_BOX),
+            PIXI.Assets.load(CONFIG.ASSETS.BUBBLE_TAIL)
+        ]);
+        this.cache.set('bubbleBox', box);
+        this.cache.set('bubbleTail', tail);
+    }
     getBubbleAssets() {
-        return {
-            box: this.cache.get('bubbleBox'),
-            tail: this.cache.get('bubbleTail')
-        };
+        return { box: this.cache.get('bubbleBox'), tail: this.cache.get('bubbleTail') };
     }
 }

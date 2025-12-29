@@ -2,6 +2,9 @@ import { CONFIG, STATES } from './modules/Constants.js';
 import { AssetManager } from './modules/AssetManager.js';
 import { Reindeer } from './modules/Reindeer.js';
 
+// ลดการสั่นสะเทือนของ PIXI
+PIXI.settings.SCALE_MODE = PIXI.SCALE_MODES.NEAREST;
+
 /**
  * Main Application - หัวใจของระบบหน้าจอ
  * ประสานงานทุกอย่างให้ทำงานร่วมกันอย่างราบรื่นค่ะ
@@ -10,9 +13,9 @@ class ReindeerApp {
     constructor() {
         this.app = null;
         this.assets = new AssetManager();
-        this.reindeerMap = new Map(); // เก็บกวางโดยใช้ username เป็น Key (แทน activeReindeers)
+        this.reindeerMap = new Map();
         this.socket = null;
-
+        this.isReady = false; // ✅ เพิ่มตัวแปรเช็คความพร้อม
         this.init();
     }
 
@@ -28,11 +31,12 @@ class ReindeerApp {
         });
         document.body.appendChild(this.app.view);
 
-        // 2. โหลด Assets ทั้งหมด
-        await this.assets.init();
-
-        // 3. เชื่อมต่อ Socket.io
+        // 2. เชื่อมต่อ Socket.io
         this.initSocket();
+
+        // 3. โหลด Assets ทั้งหมด
+        await this.assets.init();
+        this.isReady = true; // ✅ ตั้งค่าเป็นพร้อม
 
         // 4. เริ่ม Game Loop (ใช้ชื่อ update ตามมาตรฐานค่ะ)
         this.app.ticker.add((delta) => this.update(delta));
@@ -50,6 +54,9 @@ class ReindeerApp {
 
         // รับ Event การกระทำต่างๆ
         this.socket.on('game_event', (event) => {
+
+            if (!this.isReady) return; // ✅ เช็คสถานะพร้อมก่อน
+
             const { type, data, owner, wish, bubbleType } = event;
 
             switch (type) {
@@ -81,7 +88,9 @@ class ReindeerApp {
             if (cmd.type === 'JUMP_ALL') {
                 this.reindeerMap.forEach(r => r.jump());
             } else if (cmd.type === 'RUN_LEFT') {
-                this.reindeerMap.forEach(r => r.state = STATES.RUNNING);
+                this.reindeerMap.forEach(r => r.runAway('left'));
+            } else if (cmd.type === 'RUN_RIGHT') {
+                this.reindeerMap.forEach(r => r.runAway('right'));
             }
         });
     }

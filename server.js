@@ -38,24 +38,25 @@ presence.start(); // เริ่ม Loop เช็คคนออนไลน�
 // --- 🌐 API Routes ---
 
 // รับข้อมูลจาก Twitch EventSub
-app.post('/eventsub', async (req, res) => {
-    // 1. ตรวจสอบว่าข้อมูลส่งมาจาก Twitch จริงหรือไม่ (Security First!)
+app.post('/eventsub/callback', async (req, res) => {
+    // --- 🔍 เพิ่ม Log ตรงนี้เพื่อเช็คว่า Twitch เคาะประตูบ้านเราไหม ---
+    const messageType = req.headers['twitch-eventsub-message-type'];
+    console.log(`📥 [Webhook] Incoming Request: ${messageType}`);
+
     if (!twitch.verifySignature(req)) {
+        console.error("❌ [Webhook] Signature Verification Failed! เช็ค TWITCH_SIGNING_SECRET ใน .env นะคะ");
         return res.status(403).send('Invalid signature');
     }
 
-    const messageType = req.headers['twitch-eventsub-message-type'];
-
-    // 2. ตอบกลับการยืนยัน Webhook (Challenge)
     if (messageType === 'webhook_callback_verification') {
+        console.log("✅ [Webhook] URL Verified by Twitch!");
         return res.status(200).send(req.body.challenge);
     }
 
-    // 3. จัดการข้อมูล Notification
     if (messageType === 'notification') {
         const { event, subscription } = req.body;
+        console.log(`🎁 [Webhook] Reward Received: ${event.reward.title}`); // เช็คว่าชื่อรางวัลที่ส่งมาคืออะไร
 
-        // ตรวจสอบว่าเป็นรางวัล Channel Points หรือไม่
         if (subscription.type === 'channel.channel_points_custom_reward_redemption.add') {
             await rewardHandler.handle(event.reward.title, event);
         }

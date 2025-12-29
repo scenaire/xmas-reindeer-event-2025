@@ -12,26 +12,32 @@ export class RewardHandler {
         // การจับคู่ชื่อรางวัลกับฟังก์ชัน (Command Mapping)
         // ถ้าคุณ Nair เพิ่มรางวัลใน Twitch ก็แค่มาเพิ่มชื่อตรงนี้ค่ะ
         this.commands = {
+            // ใช้คำสำคัญที่อยู่ในชื่อรางวัลของคุณ Nair ค่ะ
             'spawn reindeer': (data) => this.handleSpawn(data),
-            'reindeer: make a wish': (data) => this.handleWish(data),
-            'reindeer: change skin': (data) => this.handleChangeSkin(data),
-            'reindeer: run left': () => this.io.emit('command', { type: 'RUN_LEFT' }),
-            'reindeer: jump all': () => this.io.emit('command', { type: 'JUMP_ALL' })
+            'make a wish': (data) => this.handleWish(data),
+            'run left': () => this.io.emit('command', { type: 'RUN_LEFT' }),
+            'run right': () => this.io.emit('command', { type: 'RUN_RIGHT' }), // เพิ่มอันนี้ที่คุณ Nair มี
+            'jump all': () => this.io.emit('command', { type: 'JUMP_ALL' }),
+            'zero gravity': () => this.io.emit('command', { type: 'ZERO_GRAVITY' }), // เพิ่มอันนี้ที่คุณ Nair มี
+            'find my deer': (data) => this.handleFindDeer(data) // เพิ่มฟังก์ชันรองรับรางวัลใหม่
         };
     }
 
     /**
      * ฟังก์ชันหลักสำหรับรับ Event จาก Webhook
      */
+    // เปลี่ยนจาก find เป็นการวนลูปเช็คคำสำคัญค่ะ
     async handle(rewardTitle, eventData) {
         const title = rewardTitle.toLowerCase();
 
-        // ค้นหา Command ที่ตรงกับชื่อรางวัล (ใช้ partial match เพื่อความยืดหยุ่นค่ะ)
+        // ค้นหาคีย์ที่ "อยู่ใน" ชื่อรางวัล
         const commandKey = Object.keys(this.commands).find(key => title.includes(key));
 
-        if (this.commands[commandKey]) {
-            console.log(`🎁 [Reward] Executing: ${commandKey} for ${eventData.user_name}`);
+        if (commandKey) {
+            console.log(`🎁 [Reward] Matched: ${commandKey}`);
             return this.commands[commandKey](eventData);
+        } else {
+            console.log(`⚠️ [Reward] No match for: ${rewardTitle}`);
         }
     }
 

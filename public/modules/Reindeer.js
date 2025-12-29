@@ -1,51 +1,122 @@
 import { CONFIG, STATES } from './Constants.js';
 import { ChatBubble } from './ChatBubble.js';
 
-/**
- * Reindeer Class - ตัวแทนความสดใสในสตรีมของคุณ Nair
- * น้องกวางแต่ละตัวจะมีนิสัยและความรับผิดชอบเป็นของตัวเองค่ะ
- */
 export class Reindeer extends PIXI.AnimatedSprite {
     constructor(data, assetManager) {
-        // 1. ตั้งค่า Texture เริ่มต้น (Idle)
-        const idleFrames = assetManager.getAnimation(data.rarity, 'idle');
-        super(idleFrames);
+        // 1. ดึงเฟรมมาเช็คก่อน ถ้าไม่มี ให้ใช้ภาพขาวเปล่าๆ แก้ขัด (กัน Error ตอนเริ่ม)
+        let initialFrames = assetManager.getAnimation(data.rarity, 'idle');
+        if (!initialFrames || initialFrames.length === 0) {
+            console.warn(`⚠️ Texture missing for ${data.rarity}, using fallback.`);
+            initialFrames = [PIXI.Texture.WHITE];
+        }
 
-        this.data = data; // { owner, rarity, wish, behavior, image, bubbleType }
+        super(initialFrames);
+
+        this.data = data;
         this.assetManager = assetManager;
+        this.autoUpdate = false; // ปิด autoUpdate เพื่อคุมเอง
+        this.animationSpeed = CONFIG.ANIMATION.SPEED || 0.1;
+        this.loop = true;
 
-        this.state = STATES.ENTERING;
-        this.vx = 0;
-        this.vy = 0;
-        this.targetX = Math.random() * (CONFIG.SCREEN_WIDTH - 200) + 100;
+        // ... (ส่วนตั้งค่าตำแหน่งเดิมของคุณ Nair) ...
+        const startAtLeft = Math.random() < 0.5;
+        this.x = startAtLeft ? -100 : CONFIG.SCREEN_WIDTH + 100;
+        this.y = CONFIG.GROUND_Y + (Math.random() * 30);
+        this.state = 'moving';
+        this.targetX = 50 + Math.random() * (CONFIG.SCREEN_WIDTH - 100);
+        this.idleTimer = null;
 
         this.setupProperties();
-        this.createUI();
 
-        this.animationSpeed = 0.15;
-        this.play();
+        // เช็คว่ามีเฟรมจริงไหมค่อยสั่งเล่น
+        if (initialFrames.length > 1) this.play();
     }
 
     setupProperties() {
-        this.anchor.set(0.5, 1); // ให้จุดหมุนอยู่กึ่งกลางเท้า
-        this.x = -150; // เริ่มจากนอกจอซ้าย
-        this.y = CONFIG.GROUND_Y + (Math.random() * 50); // กระจายแถวตอนยืน
-
+        this.anchor.set(0.5, 1);
         const scale = CONFIG.SCALES[this.data.rarity] || 2.0;
         this.scale.set(scale);
 
-        // ความเร็วตามแรร์ริตี้ หรือนิสัย
-        this.baseSpeed = CONFIG.SPEED.MIN + Math.random() * (CONFIG.SPEED.MAX - CONFIG.SPEED.MIN);
+        const speedBonus = (this.data.rarity === 'Mythic' || this.data.rarity === 'Epic') ? 0.5 : 0;
+        this.walkSpeed = (1.5 + Math.random() + speedBonus);
+    }
 
-        // ถ้าเป็นกวาง Mythic จะมี Effect เรืองแสง (Glowing)
-        if (this.data.behavior === 'glowing') {
-            this.filters = [new PIXI.filters.ColorMatrixFilter()];
-            this.filters[0].brightness(1.5);
+    update(delta) {
+        if (this.destroyed) return;
+
+        // ... (Logic การเดินเดิมของคุณ Nair) ...
+        if (this.state === 'moving') {
+            const dx = this.targetX - this.x;
+            if (Math.abs(dx) < 5) {
+                this.x = this.targetX;
+                this.startIdle();
+            } else {
+                this.vx = Math.sign(dx) * this.walkSpeed;
+                this.x += this.vx * delta;
+                this.updateAnimation('walk');
+            }
+        }
+        else if (this.state.startsWith('running')) {
+            this.vx = (this.state === 'running_left') ? -5 : 5;
+            this.x += this.vx * delta;
+            this.updateAnimation('walk');
+
+            if (this.x < -300 || this.x > CONFIG.SCREEN_WIDTH + 300) {
+                this.state = 'moving';
+                this.targetX = 50 + Math.random() * (CONFIG.SCREEN_WIDTH - 100);
+            }
+        }
+
+        if (this.vx !== 0 && this.state !== 'idle') {
+            this.scale.x = Math.sign(this.vx) * Math.abs(this.scale.x);
+        }
+
+        // ✅ จุดแก้สำคัญ: เช็คก่อนว่ามี Texture ให้เล่นไหม
+        // ถ้า Texture หาย หรือ array ว่างเปล่า ห้ามเรียก super.update เด็ดขาด!
+        if (this.playing && this.textures && this.textures.length > 0 && this.textures[this.currentFrame]) {
+            super.update(delta);
         }
     }
 
+    updateAnimation(type) {
+        const newFrames = this.assetManager.getAnimation(this.data.rarity, type);
+
+        // กันเหนียว: ถ้าได้มาเป็น null หรือ array ว่าง ไม่ต้องทำอะไร (ใช้ของเดิมไปก่อน)
+        if (!newFrames || newFrames.length === 0) return;
+
+        if (this.textures !== newFrames) {
+            this.textures = newFrames;
+            this.play();
+        }
+    }
+
+    // ... (ส่วนอื่นๆ เหมือนเดิม) ...
+    startIdle() {
+        this.state = 'idle';
+        this.vx = 0;
+        this.updateAnimation('idle');
+
+        if (this.idleTimer) clearTimeout(this.idleTimer);
+        this.idleTimer = setTimeout(() => {
+            if (this.destroyed) return;
+            this.pickNewTarget();
+            this.state = 'moving';
+        }, 3000 + Math.random() * 4000);
+    }
+
+    pickNewTarget() { this.targetX = 50 + Math.random() * (CONFIG.SCREEN_WIDTH - 100); }
+    runAway(direction) {
+        if (this.idleTimer) clearTimeout(this.idleTimer);
+        this.state = direction === 'left' ? 'running_left' : 'running_right';
+    }
+    destroy(options) {
+        if (this.idleTimer) clearTimeout(this.idleTimer);
+        super.destroy(options);
+    }
+
+    // ... (ส่วน createUI และ addWish เหมือนเดิม) ...
     createUI() {
-        // 1. ป้ายชื่อเจ้าของ (Owner Name)
+        // 1. สร้างป้ายชื่อเจ้าของ
         const nameStyle = new PIXI.TextStyle({
             fontFamily: 'Arial',
             fontSize: 14,
@@ -54,12 +125,24 @@ export class Reindeer extends PIXI.AnimatedSprite {
             stroke: '#000000',
             strokeThickness: 3
         });
+
         this.nameTag = new PIXI.Text(this.data.owner, nameStyle);
         this.nameTag.anchor.set(0.5);
-        this.nameTag.y = 20; // อยู่ใต้เท้าน้องกวาง
+        this.nameTag.y = 10;
         this.addChild(this.nameTag);
 
-        // 2. สร้าง Bubble ถ้ามีความปรารถนา (Wish)
+        // --- ✅ เพิ่ม Logic ซ่อนชื่อหลังจาก 5 วินาที ---
+        // ใช้ค่าจาก Constants ที่เราตั้งไว้ค่ะ
+        setTimeout(() => {
+            if (this.nameTag && !this.destroyed) {
+                // จะใช้วิธีซ่อน (visible = false) หรือ ค่อยๆ จางหาย (Alpha) ก็ได้ค่ะ
+                // ในที่นี้ขอใช้วิธีซ่อนเพื่อให้เรียบง่ายตามหลัก Occam's Razor นะคะ
+                this.nameTag.visible = false;
+                console.log(`🏷️ Name tag for ${this.data.owner} is now hidden.`);
+            }
+        }, CONFIG.NAME_DISPLAY_DURATION);
+
+        // 2. สร้าง Bubble ถ้ามีคำขอพร (ส่วนนี้ยังอยู่เหมือนเดิมค่ะ)
         if (this.data.wish) {
             this.addWish(this.data.wish, this.data.bubbleType);
         }
@@ -67,83 +150,9 @@ export class Reindeer extends PIXI.AnimatedSprite {
 
     addWish(text, type) {
         if (this.bubble) this.removeChild(this.bubble);
-
         const assets = this.assetManager.getBubbleAssets();
         this.bubble = new ChatBubble(text, type, assets);
         this.addChild(this.bubble);
-
-        // ตั้งเวลาหายไปตามที่กำหนดใน Config
-        this.bubble.destroyWithDelay(CONFIG.WISH_DURATION);
-    }
-
-    /**
-     * ระบบอัปเดตตำแหน่งและ Logic ในแต่ละเฟรม (Game Loop)
-     */
-    update(delta) {
-        switch (this.state) {
-            case STATES.ENTERING:
-                this.handleEntering(delta);
-                break;
-            case STATES.WALKING:
-                this.handleWalking(delta);
-                break;
-            case STATES.RUNNING:
-                this.handleRunning(delta);
-                break;
-        }
-
-        // จัดการเรื่องการหันซ้าย-ขวาตามความเร็ว
-        if (this.vx !== 0) {
-            this.scale.x = Math.abs(this.scale.x) * (this.vx > 0 ? 1 : -1);
-        }
-    }
-
-    handleEntering(delta) {
-        this.vx = this.baseSpeed;
-        this.x += this.vx * delta;
-        this.changeAnimation('walk');
-
-        if (this.x >= this.targetX) {
-            this.state = STATES.IDLE;
-            this.vx = 0;
-            this.changeAnimation('idle');
-        }
-    }
-
-    handleRunning(delta) {
-        this.vx = -this.baseSpeed * CONFIG.SPEED.RUN_MULTIPLIER;
-        this.x += this.vx * delta;
-        this.changeAnimation('walk');
-
-        // วิ่งออกจากจอแล้วลบตัวเอง
-        if (this.x < -200) {
-            this.destroy();
-        }
-    }
-
-    changeAnimation(type) {
-        const newFrames = this.assetManager.getAnimation(this.data.rarity, type);
-        if (this.textures !== newFrames) {
-            this.textures = newFrames;
-            this.play();
-        }
-    }
-
-    jump() {
-        if (this.state === STATES.JUMPING) return;
-
-        const originalY = this.y;
-        this.vy = CONFIG.JUMP_FORCE;
-
-        const jumpTicker = (delta) => {
-            this.vy += CONFIG.GRAVITY * delta;
-            this.y += this.vy * delta;
-
-            if (this.y >= originalY) {
-                this.y = originalY;
-                PIXI.Ticker.shared.remove(jumpTicker);
-            }
-        };
-        PIXI.Ticker.shared.add(jumpTicker);
+        this.bubble.destroyWithDelay(CONFIG.WISH_DURATION || 15000);
     }
 }
