@@ -9,17 +9,17 @@ import tmi from 'tmi.js';
 
 // --- Configuration ---
 const PORT = process.env.PORT || 8080;
-const TWITCH_SECRET = process.env.TWITCH_SIGNING_SECRET;
+// ✅ ดึงค่าจาก .env ตามชื่อใหม่ที่คุณตั้ง
+const TWITCH_SECRET = process.env.TWITCH_SIGNING_SECRET; // อย่าลืมบรรทัดนี้ใน .env นะคะ (สำหรับ Webhook)
 const CLIENT_ID = process.env.TWITCH_CLIENT_ID;
-const USER_ACCESS_TOKEN = process.env.TWITCH_USER_ACCESS_TOKEN;
+const USER_ACCESS_TOKEN = process.env.TWITCH_USER_ACCESS_TOKEN; // ใช้ User Token
 const CHANNEL_NAME = process.env.CHANNEL_NAME;
-const ONLINE_CHECK_INTERVAL = 20000;
+const ONLINE_CHECK_INTERVAL = 20000; // เช็คชื่อทุก 20 วินาที
 
 // --- File Paths ---
 const REINDEER_LOG_PATH = './data/reindeers.json';
 const GAME_STATE_PATH = './data/gameState.json';
 const COLLECTION_PATH = './data/collection.json';
-const EMOTE_CACHE_PATH = './data/emoteCache.json'; // 📁 เพิ่ม Path Cache
 
 // --- Setup Server ---
 const app = express();
@@ -35,9 +35,6 @@ const gachaSystem = new GachaManager();
 let visibleUsers = new Set();
 const userLastActive = {};
 
-// ✅ สมุดจด Emote (รวมทั้งจาก API และ TMI)
-let emoteDictionary = {};
-
 // --- 💾 Helper Functions ---
 
 function loadGameState() {
@@ -46,116 +43,75 @@ function loadGameState() {
 }
 
 function updateGameState(userData) {
-    if (!userData || !userData.owner) return;
+    if (!userData || !userData.owner) {
+        console.error("❌ Error: Trying to save invalid data!", userData);
+        return;
+    }
+
     const currentState = loadGameState();
     currentState[userData.owner] = userData;
     fs.writeJsonSync(GAME_STATE_PATH, currentState, { spaces: 2 });
 }
 
-// ---------------------------------------------------------
-// 🖼️ EMOTE SYSTEM (Ported from Krathongs Project)
-// ---------------------------------------------------------
-
-async function fetchChannelEmotes() {
-    // 1. ลองโหลดจาก Cache ก่อน
-    if (fs.existsSync(EMOTE_CACHE_PATH)) {
-        try {
-            const cache = fs.readJsonSync(EMOTE_CACHE_PATH);
-            const age = Date.now() - cache.timestamp;
-            // ถ้า Cache อายุไม่เกิน 24 ชม. ให้ใช้เลย
-            if (age < 24 * 60 * 60 * 1000) {
-                console.log("💾 Loaded emotes from cache.");
-                // Merge เข้า Dictionary หลัก
-                Object.assign(emoteDictionary, cache.data);
-                return;
-            }
-        } catch (e) { console.warn("Cache invalid, fetching new..."); }
+// ✅ แก้ไขฟังก์ชันนี้ให้ใช้ USER_ACCESS_TOKEN
+async function getOnlineViewers() {
+    if (!CLIENT_ID || !USER_ACCESS_TOKEN || !CHANNEL_NAME) {
+        console.warn("⚠️ Warning: Missing Twitch Credentials in .env (Check CLIENT_ID / USER_ACCESS_TOKEN)");
+        return null;
     }
 
-    // 2. ถ้าไม่มี Cache ต้องยิง API
-    if (!CLIENT_ID || !USER_ACCESS_TOKEN || !CHANNEL_NAME) return;
-
     try {
-        console.log("🌐 Fetching channel emotes from Twitch API...");
-
-        // A. หา ID ช่อง (Broadcaster ID)
+        // 1. หา ID ของช่องก่อน (Broadcaster ID)
         const userRes = await fetch(`https://api.twitch.tv/helix/users?login=${CHANNEL_NAME}`, {
-            headers: { 'Client-Id': CLIENT_ID, 'Authorization': `Bearer ${USER_ACCESS_TOKEN}` }
+            headers: {
+                'Client-Id': CLIENT_ID,
+                'Authorization': `Bearer ${USER_ACCESS_TOKEN}` // ✅ ใช้ User Token
+            }
         });
+
         const userData = await userRes.json();
-        if (!userData.data || userData.data.length === 0) return;
+        if (!userData.data || userData.data.length === 0) {
+            console.warn(`⚠️ Channel '${CHANNEL_NAME}' not found.`);
+            return null;
+        }
         const broadcasterId = userData.data[0].id;
 
-        // B. ดึง Emote ของช่อง
-        const emoteRes = await fetch(`https://api.twitch.tv/helix/chat/emotes?broadcaster_id=${broadcasterId}`, {
-            headers: { 'Client-Id': CLIENT_ID, 'Authorization': `Bearer ${USER_ACCESS_TOKEN}` }
+        // 2. ดึงรายชื่อคนดู (Get Chatters)
+        const chattersRes = await fetch(`https://api.twitch.tv/helix/chat/chatters?broadcaster_id=${broadcasterId}&moderator_id=${broadcasterId}&first=1000`, {
+            headers: {
+                'Client-Id': CLIENT_ID,
+                'Authorization': `Bearer ${USER_ACCESS_TOKEN}` // ✅ ใช้ User Token
+            }
         });
-        const emoteData = await emoteRes.json();
 
-        const newEmotes = {};
-        if (emoteData.data) {
-            emoteData.data.forEach(emote => {
-                // เก็บเป็น Name -> ID (เช่น "nairsLove": "12345")
-                newEmotes[emote.name] = emote.id;
-            });
+        if (!chattersRes.ok) {
+            const err = await chattersRes.json();
+            console.warn(`⚠️ Cannot get chatters: ${err.message} (Status: ${chattersRes.status})`);
+            return null;
         }
 
-        // C. บันทึกลงไฟล์และ Memory
-        Object.assign(emoteDictionary, newEmotes); // รวมร่าง
-        fs.ensureFileSync(EMOTE_CACHE_PATH);
-        fs.writeJsonSync(EMOTE_CACHE_PATH, {
-            timestamp: Date.now(),
-            data: newEmotes
-        }, { spaces: 2 });
+        const chattersData = await chattersRes.json();
+        const onlineNames = chattersData.data.map(user => user.user_login.toLowerCase());
 
-        console.log(`✅ Cached ${Object.keys(newEmotes).length} channel emotes.`);
+        return new Set(onlineNames);
 
-    } catch (err) {
-        console.error("⚠️ Error fetching emotes:", err.message);
+    } catch (error) {
+        console.error("❌ Helix API Error:", error.message);
+        return null;
     }
 }
 
-// เรียกทำงานตอนเริ่ม Server ทันที
-fetchChannelEmotes();
-
-// ---------------------------------------------------------
-
-async function getOnlineViewers() {
-    // ... (ใช้ฟังก์ชันเดิมของคุณ) ...
-    // เนื่องจากเรามี fetchChannelEmotes แยกแล้ว ฟังก์ชันนี้ใช้แค่เช็คคนดูพอครับ
-    if (!CLIENT_ID || !USER_ACCESS_TOKEN || !CHANNEL_NAME) return null;
-    try {
-        const userRes = await fetch(`https://api.twitch.tv/helix/users?login=${CHANNEL_NAME}`, {
-            headers: { 'Client-Id': CLIENT_ID, 'Authorization': `Bearer ${USER_ACCESS_TOKEN}` }
-        });
-        const userData = await userRes.json();
-        if (!userData.data || !userData.data[0]) return null;
-        const broadcasterId = userData.data[0].id;
-
-        const chattersRes = await fetch(`https://api.twitch.tv/helix/chat/chatters?broadcaster_id=${broadcasterId}&moderator_id=${broadcasterId}&first=1000`, {
-            headers: { 'Client-Id': CLIENT_ID, 'Authorization': `Bearer ${USER_ACCESS_TOKEN}` }
-        });
-        if (!chattersRes.ok) return null;
-        const chattersData = await chattersRes.json();
-        return new Set(chattersData.data.map(user => user.user_login.toLowerCase()));
-    } catch (error) { return null; }
-}
-
-// --- Loop เช็คชื่ออัตโนมัติ (เหมือนเดิม) ---
+// --- Loop เช็คชื่ออัตโนมัติ ---
 setInterval(async () => {
-    // ... (Logic เดิม: เช็คคนหาย / คนกลับมา) ...
     const onlineUsers = await getOnlineViewers();
     if (!onlineUsers) return;
 
     const currentState = loadGameState();
 
-    // A. เช็คคนหาย (พร้อม Immunity 2 นาที)
+    // A. เช็คคนหาย
     visibleUsers.forEach(owner => {
-        const isOfflineInAPI = !onlineUsers.has(owner.toLowerCase());
-        const lastSeen = userLastActive[owner] || 0;
-        const isInactive = (Date.now() - lastSeen) > 120000;
-
-        if (isOfflineInAPI && isInactive) {
+        if (!onlineUsers.has(owner.toLowerCase())) {
+            console.log(`👋 ${owner} left the stream.`);
             io.emit('game_event', { type: 'DISMISS', owner: owner });
             visibleUsers.delete(owner);
         }
@@ -164,22 +120,50 @@ setInterval(async () => {
     // B. เช็คคนกลับมา
     Object.values(currentState).forEach(deer => {
         if (!deer || !deer.owner) return;
-        if (onlineUsers.has(deer.owner.toLowerCase()) && !visibleUsers.has(deer.owner)) {
+
+        const ownerLower = deer.owner.toLowerCase();
+        if (onlineUsers.has(ownerLower) && !visibleUsers.has(deer.owner)) {
+            console.log(`✨ ${deer.owner} returned!`);
             io.emit('game_event', { type: 'SPAWN', ...deer, isRestore: true });
             visibleUsers.add(deer.owner);
         }
     });
+
 }, ONLINE_CHECK_INTERVAL);
 
 // --- Socket.io ---
 io.on('connection', async (socket) => {
-    // ... (Logic เดิม) ...
+    console.log('🔌 Overlay connected! Checking online users...');
+    visibleUsers.clear();
+
+    const currentState = loadGameState();
+    const onlineUsers = await getOnlineViewers();
+    let activeDeers = Object.values(currentState);
+
+    // กรองเอาเฉพาะคนออนไลน์
+    if (onlineUsers) {
+        const total = activeDeers.length;
+        activeDeers = activeDeers.filter(deer => onlineUsers.has(deer.owner.toLowerCase()));
+        console.log(`✨ Filtered: Show ${activeDeers.length}/${total} deers (Online Only)`);
+    } else {
+        console.log(`⚠️ Online check skipped/failed. Showing all deers.`);
+    }
+
+    if (activeDeers.length > 0) {
+        activeDeers.forEach((deer, index) => {
+            visibleUsers.add(deer.owner);
+            setTimeout(() => {
+                socket.emit('game_event', { type: 'SPAWN', ...deer, isRestore: true });
+            }, index * 100);
+        });
+    }
 });
 
 // --- Webhook Route ---
 app.post('/eventsub/callback', (req, res) => {
     const { 'twitch-eventsub-message-type': messageType } = req.headers;
 
+    // (เช็ค Signature ต้องใช้ TWITCH_SECRET จาก .env ซึ่งต้องตั้งแยกต่างหากนะคะ)
     if (!verifyTwitchSignature(req)) return res.status(403).send("Forbidden");
     if (messageType === 'webhook_callback_verification') return res.send(req.body.challenge);
 
@@ -190,55 +174,54 @@ app.post('/eventsub/callback', (req, res) => {
         const userInput = event.user_input || "";
 
         userLastActive[userName] = Date.now();
-        visibleUsers.add(userName);
+        visibleUsers.add(userName); // กันเหนียว: ให้ถือว่าออนไลน์ไปเลย
 
         console.log(`🎁 Check Reward: [${rewardTitle}] by ${userName}`);
 
-        // --- 🎮 ZONE COMMANDS ---
         if (rewardTitle.includes("reindeer: run left")) io.emit('command', { type: 'RUN_LEFT' });
         else if (rewardTitle.includes("reindeer: run right")) io.emit('command', { type: 'RUN_RIGHT' });
         else if (rewardTitle.includes("reindeer: jump all")) io.emit('command', { type: 'JUMP_ALL' });
-        else if (rewardTitle.includes("reindeer: zero gravity")) io.emit('command', { type: 'ZERO_GRAVITY' });
         else if (rewardTitle.includes("reindeer: find my deer")) {
-            // ... (Logic Find My Deer ที่เราแก้กันล่าสุด) ...
             const currentState = loadGameState();
             const targetDeer = currentState[userName];
+
             if (targetDeer) {
+                // ✨ 1. Force Spawn เสมอ! (ไม่ต้องเช็ค visibleUsers แล้ว เพราะเราแอดไปตั้งแต่ต้นฟังก์ชันแล้ว)
+                // การส่งซ้ำจะช่วยกู้ชีพกวางที่ Client อาจจะเผลอลบไป ให้กลับมาทันที
                 io.emit('game_event', { type: 'SPAWN', ...targetDeer, isRestore: true });
+
+                // ✨ 2. สั่งให้กระโดดโชว์ตัว (หน่วงเวลา 200ms รอให้ Spawn เสร็จก่อน)
                 setTimeout(() => {
                     io.emit('command', { type: 'FIND_MY_DEER', targetOwner: userName });
                 }, 200);
+
+            } else {
+                console.log(`❌ ${userName} tried Find My Deer but has no deer.`);
             }
         }
-
-        // --- 🦌 ZONE SPAWN / WISH ---
+        else if (rewardTitle.includes("reindeer: zero gravity")) io.emit('command', { type: 'ZERO_GRAVITY' });
         else if (rewardTitle.includes("spawn reindeer")) {
+            console.log("🦌 SPAWN: Rolling Gacha...");
+
+            // 1. สุ่มเกลือ/ไม่เกลือ
             const result = gachaSystem.roll(userName);
             unlockRarity(userName, result.rarity);
-            const currentWish = userInput || "";
-            const bubbleType = currentWish ? analyzeWish(currentWish) : "none";
 
-            // ✅ 3. หา Emote ID จาก Dictionary ที่เราเตรียมไว้
-            const foundEmotes = {};
-            if (currentWish) {
-                const words = currentWish.split(/\s+/);
-                words.forEach(word => {
-                    if (emoteDictionary[word]) {
-                        foundEmotes[word] = emoteDictionary[word];
-                    }
-                });
-            }
+            // 2. ✅ รับค่าตรงๆ จากคนดูเลย (ไม่สุ่มให้แล้ว)
+            const currentWish = userInput || ""; // ถ้าไม่มี input ก็ให้เป็นค่าว่าง
+
+            // 3. ✅ เช็ค Bubble: ถ้ามีคำอธิษฐานค่อยวิเคราะห์ ถ้าไม่มีก็เป็น "none"
+            const bubbleType = currentWish ? analyzeWish(currentWish) : "none";
 
             const payload = {
                 type: 'SPAWN',
                 id: Date.now(),
                 owner: userName,
-                wish: currentWish,
+                wish: currentWish,   // ✅ ส่งค่าที่รับมาตรงๆ (แก้จาก finalWish)
                 rarity: result.rarity,
                 image: result.image,
-                bubbleType: bubbleType,
+                bubbleType: bubbleType, // ✅ ส่งประเภท Bubble (หรือ "none")
                 behavior: result.behavior,
-                emotes: Object.keys(foundEmotes).length > 0 ? foundEmotes : null, // ส่ง map ไปให้ client
                 pity4: result.pity4,
                 pity5: result.pity5,
                 isNewYear: process.env.EVENT_MODE === 'new_year'
@@ -246,32 +229,27 @@ app.post('/eventsub/callback', (req, res) => {
 
             io.emit('game_event', payload);
             updateGameState(payload);
+            visibleUsers.add(userName);
             logReindeer(payload);
         }
         else if (rewardTitle.includes("reindeer: make a wish")) {
-            // ... (Logic Make a Wish พร้อมหา Emote เหมือน Spawn) ...
             const currentState = loadGameState();
             const currentDeer = currentState[userName];
+
             if (currentDeer) {
+                console.log(`✨ ${userName} made a new wish: "${userInput}"`);
+
+                //1. update wish
                 currentDeer.wish = userInput;
                 currentDeer.bubbleType = analyzeWish(userInput);
 
-                // หา Emote
-                const foundEmotes = {};
-                if (userInput) {
-                    const words = userInput.split(/\s+/);
-                    words.forEach(word => {
-                        if (emoteDictionary[word]) foundEmotes[word] = emoteDictionary[word];
-                    });
-                }
+                //2. save state
                 updateGameState(currentDeer);
-                io.emit('game_event', {
-                    type: 'UPDATE_WISH',
-                    owner: userName,
-                    wish: currentDeer.wish,
-                    bubbleType: currentDeer.bubbleType,
-                    emotes: Object.keys(foundEmotes).length > 0 ? foundEmotes : null
-                });
+
+                //3. emit event
+                io.emit('game_event', { type: 'UPDATE_WISH', owner: userName, wish: currentDeer.wish, bubbleType: currentDeer.bubbleType });
+            } else {
+                console.log(`❌ ${userName} tried to wish, but has no reindeer.`);
             }
         }
         return res.sendStatus(200);
@@ -281,7 +259,6 @@ app.post('/eventsub/callback', (req, res) => {
 
 // --- Helpers ---
 function verifyTwitchSignature(req) {
-    // ... (เหมือนเดิม) ...
     const messageId = req.headers['twitch-eventsub-message-id'];
     const timestamp = req.headers['twitch-eventsub-message-timestamp'];
     const signature = req.headers['twitch-eventsub-message-signature'];
@@ -290,7 +267,6 @@ function verifyTwitchSignature(req) {
     const hmac = 'sha256=' + crypto.createHmac('sha256', TWITCH_SECRET).update(hmacMessage).digest('hex');
     return crypto.timingSafeEqual(Buffer.from(hmac), Buffer.from(signature));
 }
-
 function analyzeWish(text) {
     const t = text.toLowerCase();
     if (/เงิน|รวย|หวย|กาชา|เกลือ|เรท|เพชร|โชค|divine|สาธุ/.test(t)) return 'money';
@@ -300,19 +276,29 @@ function analyzeWish(text) {
     return 'default';
 }
 
+// 1. โหลดสมุดสะสม
 function loadCollection() {
     fs.ensureFileSync(COLLECTION_PATH);
     try { return fs.readJsonSync(COLLECTION_PATH); } catch (err) { return {}; }
 }
+
+// 2. บันทึกระดับใหม่ลงสมุด (ใช้ตอนสุ่มกาชา)
 function unlockRarity(username, rarity) {
     const collection = loadCollection();
     const user = username.toLowerCase();
-    if (!collection[user]) collection[user] = [];
+
+    if (!collection[user]) {
+        collection[user] = [];
+    }
+
+    // ถ้ายังไม่เคยมีระดับนี้ ให้เพิ่มเข้าไป
     if (!collection[user].includes(rarity)) {
         collection[user].push(rarity);
         fs.writeJsonSync(COLLECTION_PATH, collection, { spaces: 2 });
+        console.log(`🔓 ${username} unlocked new rarity: ${rarity}`);
     }
 }
+
 function logReindeer(data) {
     fs.ensureFileSync(REINDEER_LOG_PATH);
     const logs = fs.readJsonSync(REINDEER_LOG_PATH, { throws: false }) || [];
@@ -320,36 +306,84 @@ function logReindeer(data) {
     fs.writeJsonSync(REINDEER_LOG_PATH, logs);
 }
 
-// --- 💬 TMI.js (Chat Bot & Global Emote Harvester) ---
-const client = new tmi.Client({ channels: [process.env.CHANNEL_NAME] });
+// --- 💬 TMI.js (Chat Bot System) ---
+
+// ตั้งค่า Bot เพื่อฟังแชท
+const client = new tmi.Client({
+    channels: [process.env.CHANNEL_NAME] // ฟังห้องเราเอง
+});
+
 client.connect().catch(console.error);
 
 client.on('message', (channel, tags, message, self) => {
-    if (self) return;
+    if (self) return; // ไม่คุยกับตัวเอง
 
-    // ✅ TMI Learning: เก็บตก Global Emote ที่ API ช่องหาไม่เจอ
-    if (tags.emotes) {
-        Object.keys(tags.emotes).forEach(id => {
-            const range = tags.emotes[id][0];
-            const [start, end] = range.split('-').map(Number);
-            const msgChars = Array.from(message);
-            const emoteName = msgChars.slice(start, end + 1).join('');
-
-            // จดเพิ่มลงใน Dictionary (ถ้ายังไม่มี)
-            if (!emoteDictionary[emoteName]) {
-                emoteDictionary[emoteName] = id;
-            }
-        });
-    }
-
-    // ... (Logic !reindeer change เดิม) ...
+    // เช็คคำสั่ง !reindeer change [rarity]
     if (message.toLowerCase().startsWith('!reindeer change')) {
-        // ... (โค้ดเปลี่ยนร่างเดิม) ...
+        const args = message.split(' ');
+        if (args.length < 3) return; // พิมพ์มาไม่ครบ
+
+        const targetRarity = args[2].toLowerCase(); // ระดับที่อยากเปลี่ยน (common, rare, mythic)
+        const userName = tags.username; // ชื่อคนพิมพ์
+        const userNameKey = userName.toLowerCase();
+
+        // 1. เช็คว่ามีของไหม? (ใน Collection)
+        const collection = loadCollection();
+        const userUnlocks = collection[userNameKey] || [];
+
+        // แปลง unlock ของ user เป็นตัวเล็กให้หมดเพื่อเช็ค
+        const hasUnlocked = userUnlocks.some(r => r.toLowerCase() === targetRarity);
+
+        if (hasUnlocked) {
+            console.log(`🔄 ${userName} switching to ${targetRarity}...`);
+            changeReindeerSkin(userName, targetRarity);
+        } else {
+            console.log(`❌ ${userName} try to switch to ${targetRarity} but doesn't own it.`);
+            // (Optional) อาจจะให้ Bot พิมพ์ตอบกลับไปว่า "ยังไม่มีนะจ๊ะ" ก็ได้
+        }
     }
 });
-// ... (ฟังก์ชัน changeReindeerSkin เดิม) ...
+
+// 🎮 ฟังก์ชันเปลี่ยนร่าง (Animation: Leave -> Enter)
+function changeReindeerSkin(ownerName, targetRarity) {
+    const currentState = loadGameState();
+    const currentDeer = currentState[ownerName];
+
+    // ถ้าไม่มีกวางอยู่บนจอ เปลี่ยนไม่ได้นะ
+    if (!currentDeer) return;
+
+    // 1. สั่งตัวเก่าวิ่งออกไป (Dismiss)
+    io.emit('game_event', { type: 'DISMISS', owner: ownerName });
+
+    // 2. สร้างข้อมูลตัวใหม่ (เอาข้อมูลเดิมมาแก้แค่ Image/Rarity)
+    // (เราต้องถาม GachaSystem ว่า Rarity นี้ใช้รูปอะไร)
+    // ** หมายเหตุ: ต้องเพิ่มฟังก์ชัน getImageForRarity ใน GachaManager หรือเขียน Logic ง่ายๆ ตรงนี้ **
+
+    // สมมติ Logic การเลือกรูปง่ายๆ ตาม Rarity (หรือคุณจะดึงจาก Config ก็ได้)
+    let newImage = 'texture_0.png'; // Default Common
+    if (targetRarity === 'uncommon') newImage = 'texture_1.png';
+    else if (targetRarity === 'rare') newImage = 'texture_2.png';
+    else if (targetRarity === 'epic') newImage = 'texture_3.png';
+    else if (targetRarity === 'mythic') newImage = 'texture_4.png';
+
+    const newPayload = {
+        ...currentDeer, // ก๊อปข้อมูลเดิม (คำอธิษฐาน, ชื่อ)
+        id: Date.now(),
+        rarity: targetRarity.charAt(0).toUpperCase() + targetRarity.slice(1), // ทำให้ตัวแรกใหญ่สวยๆ
+        image: newImage,
+        isRestore: false // ให้เดินเข้าใหม่เหมือนสุ่มมา
+    };
+
+    // 3. รอแป๊บนึง แล้วสั่งตัวใหม่เดินเข้ามา (Spawn)
+    setTimeout(() => {
+        io.emit('game_event', { type: 'SPAWN', ...newPayload });
+        updateGameState(newPayload); // บันทึก State ใหม่
+        logReindeer(newPayload); // (Optional) จะบันทึก Log การเปลี่ยนร่างไหม แล้วแต่ชอบ
+    }, 4000); // รอ 4 วินาที (ให้ตัวเก่าวิ่งพ้นจอก่อน)
+}
 
 httpServer.listen(PORT, () => {
     console.log(`🎄 Xmas Server running on port ${PORT}`);
-    console.log(`📡 Emote Cache System Initialized`);
+    console.log(`📡 Online Check enabled using Helix API`);
 });
+

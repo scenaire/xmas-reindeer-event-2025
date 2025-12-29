@@ -19,61 +19,6 @@ app.stage.sortableChildren = true;
 const activeReindeers = {};
 const rarityValue = { 'Common': 1, 'Uncommon': 2, 'Rare': 3, 'Epic': 4, 'Mythic': 5 };
 
-// --- 🖼️ Emote System for PIXI ---
-
-const EMOTE_CACHE = new Map(); // เก็บ Texture ที่โหลดแล้ว
-
-// 1. โหลดรูป Emote (คืนค่าเป็น PIXI Texture)
-function loadEmoteTexture(id) {
-    if (EMOTE_CACHE.has(id)) return EMOTE_CACHE.get(id);
-
-    // URL รูป Twitch (Theme Dark)
-    const url = `https://static-cdn.jtvnw.net/emoticons/v2/${id}/default/dark/3.0`;
-    const texture = PIXI.Texture.from(url);
-
-    EMOTE_CACHE.set(id, texture);
-    return texture;
-}
-
-// 2. แปลงข้อความ + Emote Map (ฉบับอัปเกรด)
-function parseMessageWithEmotes(text, emoteMap) {
-    const tokens = [];
-
-    // แยกคำด้วยช่องว่าง (เก็บช่องว่างไว้ด้วยเพื่อความสวยงาม)
-    // Regex: (\s+) จะเก็บ space เป็น token แยกออกมาด้วย
-    const words = text.split(/(\s+)/);
-
-    words.forEach(w => {
-        const cleanWord = w.trim();
-
-        // 1. เช็คจาก Map ที่ Server ส่งมา (แม่นยำสุด)
-        if (emoteMap && emoteMap[cleanWord]) {
-            tokens.push({ type: 'emote', id: emoteMap[cleanWord] });
-        }
-        // 2. ถ้าเป็นช่องว่างเฉยๆ
-        else if (cleanWord === "") {
-            tokens.push({ type: 'text', content: w });
-        }
-        // 3. Fallback: เช็ค Global Dictionary (เผื่อ Server ไม่ได้ส่งมา แต่เรารู้จัก)
-        else {
-            // Hardcode พื้นฐานเผื่อไว้
-            const GLOBAL_EMOTES = {
-                'PogChamp': '30259', 'Kappa': '25', 'LUL': '425618', 'Kreygasm': '1902',
-                'VoHiYo': '81273', 'SeemsGood': '64138', 'WutFace': '28087', 'MingLee': '68856',
-                'HeyGuys': '30259', 'BibleThump': '86'
-            };
-
-            if (GLOBAL_EMOTES[cleanWord]) {
-                tokens.push({ type: 'emote', id: GLOBAL_EMOTES[cleanWord] });
-            } else {
-                tokens.push({ type: 'text', content: w });
-            }
-        }
-    });
-
-    return tokens;
-}
-
 // --- 0. ส่วนรับข้อมูลจาก Server (Socket) ---
 
 socket.on('game_event', (data) => {
@@ -113,10 +58,10 @@ socket.on('game_event', (data) => {
 
             // 2. สร้างอันใหม่ (ถ้ามีข้อความ)
             if (data.wish && data.wish !== "") {
-                const newBubble = createChatBubble(data.wish, data.bubbleType, data.emotes);
+                const newBubble = createChatBubble(data.wish, data.bubbleType);
 
                 // ✅ อย่าลืมแก้ตรงนี้ด้วยให้เท่ากับข้างบน (-35)
-                newBubble.y = -35;
+                newBubble.y = -25;
 
                 if (deer.scale.x < 0) newBubble.scale.x = -1;
 
@@ -410,11 +355,11 @@ async function createReindeer(config) { // ⚠️ เพิ่ม async ตร�
     // 💬 CHAT BUBBLE SYSTEM
     // ถ้ามี wish ให้สร้าง Bubble
     if (config.wish && config.wish !== "") {
-        const bubble = createChatBubble(config.wish, config.bubbleType || 'default', config.emotes);
+        const bubble = createChatBubble(config.wish, config.bubbleType || 'default');
 
         // ตำแหน่ง: อยู่เหนือหัวกวาง (ปรับค่า Y ตามความสูงกวาง)
         // เนื่องจากเรา Scale กวาง x2, ตำแหน่ง -60 ก็น่าจะประมาณ -120 บนจอ
-        bubble.y = -35;
+        bubble.y = -25;
 
         // อย่าลืม! ถ้ากวางหันซ้าย Bubble ต้องไม่กลับด้านตาม
         // เดี๋ยวเราไปแก้ Logic ใน tick ให้มันหันหน้าถูกทางตลอด
@@ -678,122 +623,75 @@ async function loadSpriteSheet(path, frameCount) {
 
 // ใน public/script.js
 
-// ใน public/script.js
-
-function createChatBubble(text, type = 'default', emoteMap = null) { // 👈 รับ emoteMap เพิ่ม
+function createChatBubble(text, type = 'default') {
     const container = new PIXI.Container();
 
-    // 1. Asset & Style
+    // 1. โหลดรูป (9x9 px, ขอบ 3px)
     const boxTexture = PIXI.Texture.from('/assets/bubble/bubble_box.png');
     const tailTexture = PIXI.Texture.from('/assets/bubble/bubble_tail.png');
+
     boxTexture.baseTexture.scaleMode = PIXI.SCALE_MODES.NEAREST;
     tailTexture.baseTexture.scaleMode = PIXI.SCALE_MODES.NEAREST;
 
+    // 2. Config สี
     let tintColor = 0xFFFFFF;
     if (type === 'love') tintColor = 0xFFC0CB;
     else if (type === 'money') tintColor = 0xFFD700;
     else if (type === 'chaos') tintColor = 0xAB82FF;
     else if (type === 'food') tintColor = 0xFFA500;
 
-    // 2. Parse Text -> Tokens
-    const tokens = parseMessageWithEmotes(text, emoteMap);
-
-    // 3. 🏗️ Rich Text Layout Engine (สร้าง Container เก็บเนื้อหา)
-    const contentContainer = new PIXI.Container();
-
-    // Config ฟอนต์
-    const fontSize = 16;
-    const lineHeight = 20; // เพิ่มนิดนึงเพื่อให้ Emote หายใจสะดวก
+    // 3. สร้าง Text (ปรับตามที่ขอ)
     const style = new PIXI.TextStyle({
         fontFamily: '2005_iannnnnAMD',
-        fontSize: fontSize,
+        fontSize: 16,     // ✅ ปรับเป็น 16
+        lineHeight: 16,   // ✅ ปรับเป็น 16
         fill: '#000000',
+        align: 'center',
+        wordWrap: true,
+        wordWrapWidth: 200
     });
 
-    // Config กล่อง
-    const maxWidth = 200; // ความกว้างสูงสุดก่อนขึ้นบรรทัดใหม่
-    let currentX = 0;
-    let currentY = 0;
+    const textObj = new PIXI.Text(text, style);
+    textObj.resolution = 2;
+    textObj.roundPixels = true;
 
-    // วนลูปสร้างทีละ Token
-    tokens.forEach(token => {
-        if (token.type === 'text') {
-            // แยกเป็นคำๆ เพื่อเช็คบรรทัด (Word Wrap)
-            // ใช้ split แบบเก็บ space เพื่อความสวยงาม
-            const words = token.content.split(/(?=\s)/);
-
-            words.forEach(word => {
-                const wordText = new PIXI.Text(word, style);
-                wordText.resolution = 2;
-                wordText.roundPixels = true;
-
-                // เช็คว่าล้นบรรทัดไหม
-                if (currentX + wordText.width > maxWidth && currentX > 0) {
-                    currentX = 0;
-                    currentY += lineHeight;
-                }
-
-                wordText.x = currentX;
-                wordText.y = currentY + (lineHeight - fontSize) / 2; // จัดกึ่งกลางบรรทัด
-                contentContainer.addChild(wordText);
-                currentX += wordText.width;
-            });
-        }
-        else if (token.type === 'emote') {
-            const texture = loadEmoteTexture(token.id);
-            const sprite = new PIXI.Sprite(texture);
-
-            // ปรับขนาด Emote ให้พอดีบรรทัด (เช่น 24px)
-            const size = 24;
-            sprite.width = size;
-            sprite.height = size;
-
-            // เช็คว่าล้นบรรทัดไหม
-            if (currentX + size > maxWidth && currentX > 0) {
-                currentX = 0;
-                currentY += lineHeight;
-            }
-
-            sprite.x = currentX;
-            sprite.y = currentY - (size - fontSize) / 2 - 2; // ขยับขึ้นนิดนึงให้สวย
-            contentContainer.addChild(sprite);
-            currentX += size + 2; // เว้นช่องไฟหลัง Emote นิดนึง
-        }
-    });
-
-    // 4. คำนวณขนาดกล่องจาก contentContainer
+    // 4. คำนวณขนาดกล่อง 📐
     const cornerSize = 3;
-    const paddingX = 8;
-    const paddingY = 6; // เพิ่มนิดนึง
 
-    const boxWidth = contentContainer.width + (paddingX * 2);
-    const boxHeight = contentContainer.height + (paddingY * 2);
+    // ✅ เพิ่ม Gap ด้านข้าง (Padding X)
+    const paddingX = 8;  // ให้ด้านซ้ายขวาห่าง 8px
+    const paddingY = 4;  // ด้านบนล่างห่าง 4px (เผื่อสระลอยนิดนึง)
 
-    // 5. สร้างพื้นหลัง (9-Slice)
+    const boxWidth = textObj.width + (paddingX * 2);
+    const boxHeight = textObj.height + (paddingY * 2);
+
+    // 5. สร้าง 9-Slice Plane
     const box = new PIXI.NineSlicePlane(boxTexture, cornerSize, cornerSize, cornerSize, cornerSize);
     box.width = boxWidth;
     box.height = boxHeight;
     box.tint = tintColor;
 
+    // 6. สร้างหาง (Tail)
     const tail = new PIXI.Sprite(tailTexture);
     tail.anchor.set(0.5, 0);
     tail.x = boxWidth / 2;
-    tail.y = boxHeight - 1;
+    tail.y = boxHeight - 1; // เกยขอบล่าง 1px
     tail.tint = tintColor;
 
-    // 6. จัดตำแหน่งเนื้อหา
-    contentContainer.x = paddingX;
-    contentContainer.y = paddingY;
+    // 7. จัดตำแหน่ง Text
+    textObj.x = paddingX;
+    textObj.y = paddingY;
 
-    // 7. ประกอบร่าง
+    // 8. ประกอบร่าง
     container.addChild(box);
     container.addChild(tail);
-    container.addChild(contentContainer);
+    container.addChild(textObj);
 
-    // 8. Pivot & Animation
+    // 9. Pivot & Position
     container.pivot.x = boxWidth / 2;
     container.pivot.y = boxHeight + tail.height;
 
+    // 10. Animation
     container.scale.set(0);
     let scaleVal = 0;
     const popTicker = (delta) => {

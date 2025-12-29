@@ -1,16 +1,18 @@
 {
   "c_nairs": {
     "type": "SPAWN",
-    "id": 1766957956222,
+    "id": 1767028036544,
     "owner": "c_nairs",
-    "wish": "cnairsHyperRave ",
+    "wish": "รักน้ำ รักปลา รักซากุระ",
     "rarity": "Common",
     "image": "texture_0.png",
-    "bubbleType": "default",
+    "bubbleType": "love",
     "behavior": "normal",
-    "pity4": 1,
-    "pity5": 1,
-    "isNewYear": false
+    "emotes": null,
+    "pity4": 2,
+    "pity5": 2,
+    "isNewYear": false,
+    "isRestore": false
   },
   "Nutty1999x20": {
     "type": "SPAWN",
