@@ -6,6 +6,11 @@ const app = new PIXI.Application({
     antialias: true
 });
 PIXI.settings.SCALE_MODE = PIXI.SCALE_MODES.NEAREST;
+const GLOBAL_ANIMS = {
+    common_idle: null,
+    common_walk: null
+};
+
 document.getElementById('overlay-container').appendChild(app.view);
 
 // ✅ เปิดระบบจัดเรียงลำดับ (Z-Index Sorting)
@@ -210,62 +215,76 @@ function handleSpawnLogic(newData) {
 
 // --- 2. การสร้างและควบคุมกวาง (Core) ---
 
-function createReindeer(config) {
+async function createReindeer(config) { // ⚠️ เพิ่ม async ตรงนี้ด้วยนะคะ
     let reindeer;
 
-    // ✅ เช็ค: ถ้าเป็นกวาง Common (texture_0) ให้ใช้อนิเมชั่นดุ๊กดิ๊ก
+    // --- CASE 1: กวาง Common (ตัวดุ๊กดิ๊ก) ---
     if (config.image === 'texture_0.png') {
-        const staticTexture = PIXI.Texture.from(`/assets/${config.image}`);
+        const staticPath = `/assets/${config.image}`;
+        const staticTexture = PIXI.Texture.from(staticPath);
+
+        // สร้างตัวเปล่าๆ รอไว้ก่อน
         reindeer = new PIXI.AnimatedSprite([staticTexture]);
 
+        // ตั้งค่า animData เริ่มต้น
         reindeer.animData = {
             idle: [staticTexture],
-            walk: [staticTexture],
+            walk: [staticTexture]
         };
 
-        const loadAllAnims = async () => {
-            // 1. โหลดท่า IDLE (6 เฟรม)
-            const idleFrames = await loadSpriteSheet('texture_0_idle.png', 6);
-            if (idleFrames) {
-                reindeer.animData.idle = idleFrames;
+        // ⚡ ฟังก์ชันโหลดท่า (แบบฉลาด: เช็คของกลางก่อน)
+        const setupAnimations = async () => {
+            // A. ท่า IDLE
+            if (!GLOBAL_ANIMS.common_idle) {
+                // ถ้าของกลางยังไม่มี -> ไปโหลดมาเก็บ
+                GLOBAL_ANIMS.common_idle = await loadSpriteSheet('texture_0_idle.png', 6);
+            }
+            // เอาจากของกลางมาใส่ตัวกวาง
+            if (GLOBAL_ANIMS.common_idle) {
+                reindeer.animData.idle = GLOBAL_ANIMS.common_idle;
+                // ถ้าสถานะเป็น IDLE อยู่ -> อัปเดตทันที
                 if (reindeer.state === 'IDLE') {
-                    reindeer.textures = idleFrames;
+                    reindeer.textures = reindeer.animData.idle;
                     reindeer.play();
                 }
             }
 
-            // 2. ✅ โหลดท่า WALK (6 เฟรมใหม่ที่ Nair ส่งมา!)
-            const walkFrames = await loadSpriteSheet('texture_0_walk.png', 6);
-            if (walkFrames) {
-                reindeer.animData.walk = walkFrames;
-                // ถ้ากวางกำลังเดินอยู่ ให้สลับมาใช้ท่าเดินทันที
-                if (reindeer.state === 'WALK' || reindeer.state === 'ENTERING') {
-                    reindeer.textures = walkFrames;
+            // B. ท่า WALK (ตัวปัญหา!)
+            if (!GLOBAL_ANIMS.common_walk) {
+                // ถ้าของกลางยังไม่มี -> ไปโหลดมาเก็บ
+                GLOBAL_ANIMS.common_walk = await loadSpriteSheet('texture_0_walk.png', 6);
+            }
+            if (GLOBAL_ANIMS.common_walk) {
+                reindeer.animData.walk = GLOBAL_ANIMS.common_walk;
+                // ถ้ากำลังวิ่งหรือเดินอยู่ -> อัปเดตทันที
+                if (reindeer.state === 'WALK' || reindeer.state === 'ENTERING' || reindeer.state === 'LEAVING') {
+                    reindeer.textures = reindeer.animData.walk;
                     reindeer.play();
                 }
             }
         };
 
-        loadAllAnims();
+        setupAnimations(); // เรียกทำงาน
     }
     else {
-        // 🟦 กวางระดับอื่น (Rare/Mythic ฯลฯ)
+        // --- CASE 2: กวาง Rare/Epic/Mythic ---
         const texture = PIXI.Texture.from(`/assets/${config.image}`);
 
-        // ❌ ของเดิม: สร้างเป็น Sprite ธรรมดา (สาเหตุที่พัง เพราะมันไม่มี .play())
-        // reindeer = new PIXI.Sprite(texture);
+        // ✅ สร้าง "กล่องเดียว" ใช้ร่วมกัน (Shared Array)
+        const sharedAnim = [texture];
 
-        // ✅ ของใหม่: สร้างเป็น AnimatedSprite (ใส่ [] ครอบ texture ไว้)
-        reindeer = new PIXI.AnimatedSprite([texture]);
+        reindeer = new PIXI.AnimatedSprite(sharedAnim);
 
-        // สร้างข้อมูลอนิเมชั่นปลอมๆ ให้มัน (จะได้ไม่ Error เวลาสลับท่า)
+        // ชี้ไปที่กล่องเดียวกันเป๊ะๆ (Reference เดียวกัน)
         reindeer.animData = {
-            idle: [texture],
-            walk: [texture],
-            run: [texture]
+            idle: sharedAnim,
+            walk: sharedAnim, // ใช้รูปเดิมแทนท่าเดิน
+            run: sharedAnim
         };
 
-        reindeer.play(); // สั่งให้เล่น (ถึงจะมีเฟรมเดียวก็เถอะ)
+        // ✅ ถ้ามีเฟรมเดียว ไม่ต้องสั่ง play() และปรับ speed เป็น 0
+        reindeer.animationSpeed = 0;
+        // reindeer.play(); // ไม่ต้อง play
     }
 
     // ตั้งค่าพื้นฐาน (เหมือนเดิม)
@@ -361,8 +380,12 @@ function createReindeer(config) {
                 reindeer.play();
             }
 
-            // อัปเดตความเร็วขา
-            reindeer.animationSpeed = targetAnimSpeed;
+            // ✅ แก้ไข: ถ้ามีแค่ 1 เฟรม (กวาง Rare) ให้ความเร็วเป็น 0 ไปเลย (ประหยัด CPU)
+            if (reindeer.textures.length === 1) {
+                reindeer.animationSpeed = 0;
+            } else {
+                reindeer.animationSpeed = targetAnimSpeed; // ใช้ความเร็วที่คำนวณมา (0.1 หรือ 0.2)
+            }
         }
 
         // ------------------------------------------------------------------
