@@ -65,9 +65,10 @@ export class Reindeer extends PIXI.AnimatedSprite {
         }
 
         const inverseScaleX = Math.sign(this.scale.x);
+        // ✅ ลบการกลับด้านป้ายชื่อออก (ชื่อจะตรงตลอดเวลา)
         if (this.bubble) this.bubble.scale.x = inverseScaleX;
 
-        // ✅ ระบบ Fade Out ของ Nametag
+        // ระบบ Fade Out (เช็คชื่อตัวแปรให้ตรงกับ Constants)
         if (this.nameTag && this.nameTag.visible) {
             if (this.nameTagVisibleTime > 0) {
                 this.nameTagVisibleTime -= delta * 16.66;

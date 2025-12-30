@@ -33,9 +33,8 @@ class ReindeerApp {
 
         this.reindeerLayer = new PIXI.Container();
         this.uiLayer = new PIXI.Container();
-
-        this.app.stage.addChild(this.reindeerLayer); // กวางอยู่ชั้นล่าง
-        this.app.stage.addChild(this.uiLayer);       // ชื่อกวางอยู่ชั้นบนสุดเสมอ
+        this.app.stage.addChild(this.reindeerLayer); // กวางอยู่ข้างล่าง
+        this.app.stage.addChild(this.uiLayer);       // UI อยู่บนสุดเสมอ
 
         // 2. เชื่อมต่อ Socket.io
         this.initSocket();
