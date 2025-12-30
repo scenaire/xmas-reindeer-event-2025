@@ -31,20 +31,22 @@ class ReindeerApp {
         });
         document.body.appendChild(this.app.view);
 
-        this.reindeerLayer = new PIXI.Container();
-        this.uiLayer = new PIXI.Container();
-        this.app.stage.addChild(this.reindeerLayer); // กวางอยู่ข้างล่าง
-        this.app.stage.addChild(this.uiLayer);       // UI อยู่บนสุดเสมอ
+        // ✅ แยกเลเยอร์ให้ชัดเจน
+        this.reindeerLayer = new PIXI.Container(); // เลเยอร์กวาง (จัดเรียง Y)
+        this.uiLayer = new PIXI.Container();       // เลเยอร์ชื่อ (อยู่บนสุดเสมอ)
+
+        this.app.stage.addChild(this.reindeerLayer);
+        this.app.stage.addChild(this.uiLayer);
 
         // 2. เชื่อมต่อ Socket.io
         this.initSocket();
 
         // 3. โหลด Assets ทั้งหมด
-        await document.fonts.ready;
+        await document.fonts.ready; // รอให้ Daydream พร้อม
         await this.assets.init();
-        this.isReady = true; // ✅ ตั้งค่าเป็นพร้อม
+        this.isReady = true;
 
-        // 4. เริ่ม Game Loop (ใช้ชื่อ update ตามมาตรฐานค่ะ)
+        // 4. เริ่ม Game Loop
         this.app.ticker.add((delta) => this.update(delta));
 
         console.log("✨ [System] ทุกอย่างพร้อมแล้ว! ขอให้เป็นสตรีมที่ยอดเยี่ยมนะคะ");
@@ -111,14 +113,19 @@ class ReindeerApp {
     }
 
     spawnReindeer(data) {
-        // ถ้าคนเดิมมีกวางอยู่แล้ว ให้ลบออกก่อน (กันซ้ำค่ะ)
         if (this.reindeerMap.has(data.owner)) {
             this.removeReindeer(data.owner);
         }
 
         const reindeer = new Reindeer(data, this.assets);
+        const nameTag = reindeer.createUI(); // สร้างป้ายชื่อ
+
+        // ✅ แยกบ้านให้กวางกับชื่อ
         this.reindeerLayer.addChild(reindeer);
-        this.uiLayer.addChild(reindeer.nameTag);
+        this.uiLayer.addChild(nameTag);
+
+        // ✅ สั่งให้โชว์ชื่อทันทีที่เกิด
+        reindeer.showNametag();
 
         this.reindeerMap.set(data.owner, reindeer);
     }
@@ -126,30 +133,26 @@ class ReindeerApp {
     removeReindeer(owner) {
         const reindeer = this.reindeerMap.get(owner);
         if (reindeer) {
+            // ✅ ต้องลบทั้งกวางและชื่อ ไม่งั้นจะเกิด "ป้ายชื่อผี" ค้างขอบจอค่ะ
+            if (reindeer.nameTag) this.uiLayer.removeChild(reindeer.nameTag);
             this.reindeerLayer.removeChild(reindeer);
-            reindeer.destroy();
+
+            reindeer.destroy({ children: true });
             this.reindeerMap.delete(owner);
         }
     }
 
     update(delta) {
-        // สั่งให้น้องกวางทุกตัวอัปเดตตัวเอง
         this.reindeerMap.forEach((reindeer, owner) => {
             reindeer.update(delta);
-
             if (reindeer.nameTag) {
                 reindeer.nameTag.x = reindeer.x;
-                reindeer.nameTag.y = reindeer.y + 10; // อยู่ใต้เท้าตามที่คุณ Nair ต้องการ
+                reindeer.nameTag.y = reindeer.y + 10; // อยู่ใต้เท้าตามใจคุณ Nair ค่ะ
             }
-
-            // ถ้ากวางทำลายตัวเองไปแล้ว (เช่น วิ่งลับจอไป) ให้ลบออกจาก Map
-            if (reindeer.destroyed) {
-                this.reindeerMap.delete(owner);
-            }
+            if (reindeer.destroyed) this.reindeerMap.delete(owner);
         });
 
-        // เรียงลำดับการแสดงผลตามค่า Y (Y-Sorting) 
-        // กวางที่อยู่ล่างสุดจะทับกวางที่อยู่ด้านบน ทำให้ดูมีมิติค่ะ
+        // ✅ Sort เฉพาะเลเยอร์กวาง ไม่ต้องมายุ่งกับชื่อ (ชื่อจะได้อยู่บนสุดตลอด)
         this.reindeerLayer.children.sort((a, b) => a.y - b.y);
     }
 }

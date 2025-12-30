@@ -35,8 +35,6 @@ export class Reindeer extends PIXI.AnimatedSprite {
         this.nameTagVisibleTime = 0;
 
         this.setupProperties();
-        this.createUI();
-        this.showNametag();
 
         if (initialFrames.length > 1) this.play();
     }
@@ -73,7 +71,7 @@ export class Reindeer extends PIXI.AnimatedSprite {
             if (this.nameTagVisibleTime > 0) {
                 this.nameTagVisibleTime -= delta * 16.66;
             } else {
-                this.nameTag.alpha -= CONFIG.NAME_TAG_FADE_SPEED * delta;
+                this.nameTag.alpha -= CONFIG.NAME_TAG.FADE_SPEED * delta;
                 if (this.nameTag.alpha <= 0) {
                     this.nameTag.alpha = 0;
                     this.nameTag.visible = false;
@@ -231,29 +229,30 @@ export class Reindeer extends PIXI.AnimatedSprite {
 
     // ... (ส่วน createUI และ addWish เหมือนเดิม) ...
     createUI() {
-        // 1. สร้างป้ายชื่อเจ้าของ
         const nameStyle = new PIXI.TextStyle({
-            fontFamily: CONFIG.NAME_TAG.FONT_FAMILY, // ✅ ใช้ Config จาก Constants
-            fontSize: CONFIG.NAME_TAG.FONT_SIZE, // ปรับขนาดให้เข้ากับฟอนต์ใหม่
+            fontFamily: CONFIG.NAME_TAG.FONT_FAMILY,
+            fontSize: CONFIG.NAME_TAG.FONT_SIZE,
             fontWeight: CONFIG.NAME_TAG.FONT_WEIGHT,
             fill: CONFIG.NAME_TAG.FONT_COLOR,
             stroke: CONFIG.NAME_TAG.FONT_STROKE,
             strokeThickness: CONFIG.NAME_TAG.FONT_STROKE_THICKNESS,
-            padding: CONFIG.NAME_TAG.PADDING,
+            padding: CONFIG.NAME_TAG.PADDING
         });
 
         this.nameTag = new PIXI.Text(this.data.owner, nameStyle);
+        this.nameTag.anchor.set(0.5);
+        this.nameTag.visible = false;
+
+        // เพิ่มความคมชัด ( resolution และ Linear)
         this.nameTag.resolution = 2;
         this.nameTag.texture.baseTexture.scaleMode = PIXI.SCALE_MODES.LINEAR;
-        this.nameTag.anchor.set(0.5);
-        this.nameTag.y = 5;
-        this.nameTag.visible = false; // เริ่มต้นที่ซ่อนไว้ก่อน
 
-        // 2. สร้าง Bubble ถ้ามีคำขอพร (ส่วนนี้ยังอยู่เหมือนเดิมค่ะ)
+        // ✅ 1. สร้าง Bubble คำอธิษฐานก่อน (ย้ายขึ้นมา)
         if (this.data.wish) {
             this.addWish(this.data.wish, this.data.bubbleType);
         }
 
+        // ✅ 2. คืนค่าป้ายชื่อออกไป (ย้ายมาไว้บรรทัดสุดท้าย)
         return this.nameTag;
     }
 
