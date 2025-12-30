@@ -42,8 +42,18 @@ export const CONFIG = {
         SPEED: 0.1
     },
 
-    // --- 🎨 Name Display Time --- (5000ms = 5 seconds)
-    NAME_DISPLAY_DURATION: 5000,
+    // --- 🎨 UI Settings ---
+    NAME_TAG: {
+        DISPLAY_DURATION: 10000,
+        FONT_FAMILY: 'Daydream',
+        FONT_SIZE: 16,
+        FONT_WEIGHT: 'bold',
+        FONT_COLOR: '#352520ff',
+        FADE_SPEED: 0.02,
+        FONT_STROKE: '#ffffffff',
+        FONT_STROKE_THICKNESS: 3,
+        PADDING: 5,
+    },
 
     // --- 📂 Asset Paths ---
     ASSETS: {

@@ -31,10 +31,17 @@ class ReindeerApp {
         });
         document.body.appendChild(this.app.view);
 
+        this.reindeerLayer = new PIXI.Container();
+        this.uiLayer = new PIXI.Container();
+
+        this.app.stage.addChild(this.reindeerLayer); // กวางอยู่ชั้นล่าง
+        this.app.stage.addChild(this.uiLayer);       // ชื่อกวางอยู่ชั้นบนสุดเสมอ
+
         // 2. เชื่อมต่อ Socket.io
         this.initSocket();
 
         // 3. โหลด Assets ทั้งหมด
+        await document.fonts.ready;
         await this.assets.init();
         this.isReady = true; // ✅ ตั้งค่าเป็นพร้อม
 
@@ -111,14 +118,16 @@ class ReindeerApp {
         }
 
         const reindeer = new Reindeer(data, this.assets);
-        this.app.stage.addChild(reindeer);
+        this.reindeerLayer.addChild(reindeer);
+        this.uiLayer.addChild(reindeer.nameTag);
+
         this.reindeerMap.set(data.owner, reindeer);
     }
 
     removeReindeer(owner) {
         const reindeer = this.reindeerMap.get(owner);
         if (reindeer) {
-            this.app.stage.removeChild(reindeer);
+            this.reindeerLayer.removeChild(reindeer);
             reindeer.destroy();
             this.reindeerMap.delete(owner);
         }
@@ -129,6 +138,11 @@ class ReindeerApp {
         this.reindeerMap.forEach((reindeer, owner) => {
             reindeer.update(delta);
 
+            if (reindeer.nameTag) {
+                reindeer.nameTag.x = reindeer.x;
+                reindeer.nameTag.y = reindeer.y + 10; // อยู่ใต้เท้าตามที่คุณ Nair ต้องการ
+            }
+
             // ถ้ากวางทำลายตัวเองไปแล้ว (เช่น วิ่งลับจอไป) ให้ลบออกจาก Map
             if (reindeer.destroyed) {
                 this.reindeerMap.delete(owner);
@@ -137,7 +151,7 @@ class ReindeerApp {
 
         // เรียงลำดับการแสดงผลตามค่า Y (Y-Sorting) 
         // กวางที่อยู่ล่างสุดจะทับกวางที่อยู่ด้านบน ทำให้ดูมีมิติค่ะ
-        this.app.stage.children.sort((a, b) => a.y - b.y);
+        this.reindeerLayer.children.sort((a, b) => a.y - b.y);
     }
 }
 

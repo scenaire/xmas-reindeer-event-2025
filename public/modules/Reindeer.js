@@ -31,9 +31,12 @@ export class Reindeer extends PIXI.AnimatedSprite {
         this.floatTimer = Math.random() * 10;
         this.driftVx = (Math.random() - 0.5) * 2;
 
+        //NameTag
+        this.nameTagVisibleTime = 0;
 
         this.setupProperties();
         this.createUI();
+        this.showNametag();
 
         if (initialFrames.length > 1) this.play();
     }
@@ -58,28 +61,23 @@ export class Reindeer extends PIXI.AnimatedSprite {
             this.handleZeroGravity(delta);
         } else {
             // Logic การเดินเดิม
-            if (this.state === 'moving') {
-                const dx = this.targetX - this.x;
-                if (Math.abs(dx) < 5) {
-                    this.x = this.targetX;
-                    this.startIdle();
-                } else {
-                    this.vx = Math.sign(dx) * this.walkSpeed;
-                    this.x += this.vx * delta;
-                    this.updateAnimation('walk');
-                }
-            }
-            else if (this.state.startsWith('running')) {
-                this.vx = (this.state === 'running_left') ? -5 : 5;
-                this.x += this.vx * delta;
-                this.updateAnimation('walk');
+            this.handleWalkingAndRunning(delta);
+        }
 
-                if (this.x < -300 || this.x > CONFIG.SCREEN_WIDTH + 300) {
-                    this.state = 'moving';
-                    this.targetX = 50 + Math.random() * (CONFIG.SCREEN_WIDTH - 100);
+        const inverseScaleX = Math.sign(this.scale.x);
+        if (this.bubble) this.bubble.scale.x = inverseScaleX;
+
+        // ✅ ระบบ Fade Out ของ Nametag
+        if (this.nameTag && this.nameTag.visible) {
+            if (this.nameTagVisibleTime > 0) {
+                this.nameTagVisibleTime -= delta * 16.66;
+            } else {
+                this.nameTag.alpha -= CONFIG.NAME_TAG_FADE_SPEED * delta;
+                if (this.nameTag.alpha <= 0) {
+                    this.nameTag.alpha = 0;
+                    this.nameTag.visible = false;
                 }
             }
-            this.rotation = 0; // คืนค่าตัวตรงเมื่อไม่อยู่ในอวกาศ
         }
 
         // Logic กระโดด
@@ -139,22 +137,34 @@ export class Reindeer extends PIXI.AnimatedSprite {
         this.vy_jump = CONFIG.JUMP_FORCE;
     }
 
-    showNametag() {
-        if (this.nameTag) {
-            this.nameTag.visible = true;
-
-            if (this.nameTagTimer) clearTimeout(this.nameTagTimer);
-            this.nameTagTimer = setTimeout(() => {
-                if (this.nameTag && !this.destroyed) {
-                    this.nameTag.visible = false;
-                }
-            }, CONFIG.NAME_DISPLAY_DURATION);
-        }
-    }
-
     runAway(direction) {
         if (this.idleTimer) clearTimeout(this.idleTimer);
         this.state = direction === 'left' ? 'running_left' : 'running_right';
+    }
+
+    handleWalkingAndRunning(delta) {
+        if (this.state === 'moving') {
+            const dx = this.targetX - this.x;
+            if (Math.abs(dx) < 5) {
+                this.x = this.targetX;
+                this.startIdle();
+            } else {
+                this.vx = Math.sign(dx) * this.walkSpeed;
+                this.x += this.vx * delta;
+                this.updateAnimation('walk');
+            }
+        }
+        else if (this.state.startsWith('running')) {
+            this.vx = (this.state === 'running_left') ? -5 : 5;
+            this.x += this.vx * delta;
+            this.updateAnimation('walk');
+
+            if (this.x < -300 || this.x > CONFIG.SCREEN_WIDTH + 300) {
+                this.state = 'moving';
+                this.targetX = 50 + Math.random() * (CONFIG.SCREEN_WIDTH - 100);
+            }
+        }
+        this.rotation = 0; // คืนค่าตัวตรงเมื่อไม่อยู่ในอวกาศ
     }
 
     handleZeroGravity(delta) {
@@ -222,33 +232,35 @@ export class Reindeer extends PIXI.AnimatedSprite {
     createUI() {
         // 1. สร้างป้ายชื่อเจ้าของ
         const nameStyle = new PIXI.TextStyle({
-            fontFamily: 'Arial',
-            fontSize: 14,
-            fontWeight: 'bold',
-            fill: '#ffffff',
-            stroke: '#000000',
-            strokeThickness: 3
+            fontFamily: CONFIG.NAME_TAG.FONT_FAMILY, // ✅ ใช้ Config จาก Constants
+            fontSize: CONFIG.NAME_TAG.FONT_SIZE, // ปรับขนาดให้เข้ากับฟอนต์ใหม่
+            fontWeight: CONFIG.NAME_TAG.FONT_WEIGHT,
+            fill: CONFIG.NAME_TAG.FONT_COLOR,
+            stroke: CONFIG.NAME_TAG.FONT_STROKE,
+            strokeThickness: CONFIG.NAME_TAG.FONT_STROKE_THICKNESS,
+            padding: CONFIG.NAME_TAG.PADDING,
         });
 
         this.nameTag = new PIXI.Text(this.data.owner, nameStyle);
+        this.nameTag.resolution = 2;
+        this.nameTag.texture.baseTexture.scaleMode = PIXI.SCALE_MODES.LINEAR;
         this.nameTag.anchor.set(0.5);
-        this.nameTag.y = 10;
-        this.addChild(this.nameTag);
-
-        // --- ✅ เพิ่ม Logic ซ่อนชื่อหลังจาก 5 วินาที ---
-        // ใช้ค่าจาก Constants ที่เราตั้งไว้ค่ะ
-        setTimeout(() => {
-            if (this.nameTag && !this.destroyed) {
-                // จะใช้วิธีซ่อน (visible = false) หรือ ค่อยๆ จางหาย (Alpha) ก็ได้ค่ะ
-                // ในที่นี้ขอใช้วิธีซ่อนเพื่อให้เรียบง่ายตามหลัก Occam's Razor นะคะ
-                this.nameTag.visible = false;
-                console.log(`🏷️ Name tag for ${this.data.owner} is now hidden.`);
-            }
-        }, CONFIG.NAME_DISPLAY_DURATION);
+        this.nameTag.y = 5;
+        this.nameTag.visible = false; // เริ่มต้นที่ซ่อนไว้ก่อน
 
         // 2. สร้าง Bubble ถ้ามีคำขอพร (ส่วนนี้ยังอยู่เหมือนเดิมค่ะ)
         if (this.data.wish) {
             this.addWish(this.data.wish, this.data.bubbleType);
+        }
+
+        return this.nameTag;
+    }
+
+    showNametag() {
+        if (this.nameTag) {
+            this.nameTag.visible = true;
+            this.nameTag.alpha = 1;
+            this.nameTagVisibleTime = CONFIG.NAME_TAG_DISPLAY_DURATION;
         }
     }
 
