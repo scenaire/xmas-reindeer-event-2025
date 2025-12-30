@@ -70,6 +70,19 @@ export class RewardHandler {
         this.io.emit('game_event', { type: 'SPAWN', data: payload });
     }
 
+    handleFindDeer(eventData) {
+        // ดึงชื่อคนแลกรางวัล (Twitch ส่งมาใน user_name)
+        const ownerName = eventData.user_name;
+
+        console.log(`🔍 [Reward] Finding deer for: ${ownerName}`);
+
+        // ส่งคำสั่งไปที่หน้าจอให้กวางแสดงตัว
+        this.io.emit('game_event', {
+            type: 'FIND_DEER',
+            owner: ownerName
+        });
+    }
+
     // --- ✨ Handler สำหรับการขอพร (Wish) ---
     handleWish(data) {
         const userName = data.user_name;

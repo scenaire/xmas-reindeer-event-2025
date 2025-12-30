@@ -26,6 +26,14 @@ export class Reindeer extends PIXI.AnimatedSprite {
         this.targetX = 50 + Math.random() * (CONFIG.SCREEN_WIDTH - 100);
         this.idleTimer = null;
 
+        // ...jumping
+        this.baseY = this.y;
+        this.vy_jump = 0;
+        this.isJumping = false;
+
+        //zero gravity
+        this.floatTimer = Math.random() * 10; //สุ่มจุดเริ่มต้นการลอย
+
         this.setupProperties();
 
         // เช็คว่ามีเฟรมจริงไหมค่อยสั่งเล่น
@@ -39,31 +47,51 @@ export class Reindeer extends PIXI.AnimatedSprite {
 
         const speedBonus = (this.data.rarity === 'Mythic' || this.data.rarity === 'Epic') ? 0.5 : 0;
         this.walkSpeed = (1.5 + Math.random() + speedBonus);
+
+        this.y = CONFIG.GROUND_Y + (Math.random() * 30);
+        this.baseY = this.y;
     }
 
     update(delta) {
         if (this.destroyed) return;
 
         // ... (Logic การเดินเดิมของคุณ Nair) ...
-        if (this.state === 'moving') {
-            const dx = this.targetX - this.x;
-            if (Math.abs(dx) < 5) {
-                this.x = this.targetX;
-                this.startIdle();
-            } else {
-                this.vx = Math.sign(dx) * this.walkSpeed;
+        if (this.state === 'zero_gravity') {
+            this.handleZeroGravity(delta);
+        } else {
+            if (this.state === 'moving') {
+                const dx = this.targetX - this.x;
+                if (Math.abs(dx) < 5) {
+                    this.x = this.targetX;
+                    this.startIdle();
+                } else {
+                    this.vx = Math.sign(dx) * this.walkSpeed;
+                    this.x += this.vx * delta;
+                    this.updateAnimation('walk');
+                }
+            }
+            else if (this.state.startsWith('running')) {
+                this.vx = (this.state === 'running_left') ? -5 : 5;
                 this.x += this.vx * delta;
                 this.updateAnimation('walk');
-            }
-        }
-        else if (this.state.startsWith('running')) {
-            this.vx = (this.state === 'running_left') ? -5 : 5;
-            this.x += this.vx * delta;
-            this.updateAnimation('walk');
 
-            if (this.x < -300 || this.x > CONFIG.SCREEN_WIDTH + 300) {
-                this.state = 'moving';
-                this.targetX = 50 + Math.random() * (CONFIG.SCREEN_WIDTH - 100);
+                if (this.x < -300 || this.x > CONFIG.SCREEN_WIDTH + 300) {
+                    this.state = 'moving';
+                    this.targetX = 50 + Math.random() * (CONFIG.SCREEN_WIDTH - 100);
+                }
+            }
+            this.rotation = 0;
+        }
+
+        if (this.isJumping) {
+            this.vy_jump += CONFIG.GRAVITY * delta;
+            this.y += this.vy_jump * delta;
+
+            if (this.y >= this.baseY) {
+                this.y = this.baseY;
+                this.isJumping = false;
+                this.vy_jump = 0;
+                this.updateAnimation('walk');
             }
         }
 
@@ -105,10 +133,63 @@ export class Reindeer extends PIXI.AnimatedSprite {
     }
 
     pickNewTarget() { this.targetX = 50 + Math.random() * (CONFIG.SCREEN_WIDTH - 100); }
+
+    jump() {
+        if (this.isJumping) return;
+
+        this.isJumping = true;
+        this.vy_jump = CONFIG.JUMP_FORCE;
+    }
+
+    showNameTag() {
+        if (this.nameTag) {
+            this.nameTag.visible = true;
+
+            if (this.nameTagTimer) clearTimeout(this.nameTagTimer);
+            this.nameTagTimer = setTimeout(() => {
+                if (this.nameTag && !this.destroyed) {
+                    this.nameTag.visible = false;
+                }
+            }, CONFIG.NAME_DISPLAY_DURATION);
+        }
+    }
+
     runAway(direction) {
         if (this.idleTimer) clearTimeout(this.idleTimer);
         this.state = direction === 'left' ? 'running_left' : 'running_right';
     }
+
+    handleZeroGravity(delta) {
+        this.vx = 0; // ไม่เดินไปไหน
+        this.floatTimer += CONFIG.ZERO_GRAVITY_SPEED * delta;
+
+        // 1. ลอยขึ้น-ลงนุ่มๆ (Sine Wave)
+        this.y = this.baseY - 50 + (Math.sin(this.floatTimer) * CONFIG.ZERO_GRAVITY_AMPLITUDE);
+
+        // 2. ขยับซ้าย-ขวานิดหน่อยให้ดูไร้ทิศทาง
+        this.x += Math.cos(this.floatTimer * 0.5) * 0.5;
+
+        // 3. หมุนตัวเอียงไปมา (Space feeling)
+        this.rotation = Math.sin(this.floatTimer * 0.7) * 0.15;
+
+        this.updateAnimation('idle'); // ใช้ท่า Idle ตอนลอย
+    }
+
+    // ฟังก์ชันเปิดโหมดอวกาศ
+    enableZeroGravity(duration = 30000) {
+        const previousState = this.state;
+        this.state = STATES.ZERO_GRAVITY;
+
+        // ถ้าอยากให้มีเวลาจำกัด (เช่น 30 วินาทีแล้วกลับมาเดินปกติ)
+        setTimeout(() => {
+            if (!this.destroyed && this.state === STATES.ZERO_GRAVITY) {
+                this.state = 'moving';
+                this.y = this.baseY; // กลับลงพื้น
+                this.rotation = 0;
+            }
+        }, duration);
+    }
+
     destroy(options) {
         if (this.idleTimer) clearTimeout(this.idleTimer);
         super.destroy(options);

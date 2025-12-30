@@ -17,6 +17,8 @@ export const CONFIG = {
     },
     GRAVITY: 0.6,
     JUMP_FORCE: -12,
+    ZERO_GRAVITY_SPEED: 0.05, //ความเร็วการลอย
+    ZERO_GRAVITY_AMPLITUDE: 30, //ระยะการลอย (px)
 
     // --- 🎨 Visuals & Scales ---
     SCALES: {
@@ -36,7 +38,7 @@ export const CONFIG = {
         FRAME_COUNT: 6, // แก้จาก 4 เป็น 6 ตามที่คุณ Nair บอกค่ะ
         FRAME_WIDTH: 48,
         FRAME_HEIGHT: 48,
-        SPEED: 0.8
+        SPEED: 0.1
     },
 
     // --- 🎨 Name Display Time --- (5000ms = 5 seconds)
@@ -64,5 +66,6 @@ export const STATES = {
     IDLE: 'IDLE',         // ยืนนิ่งๆ
     WALKING: 'WALKING',   // เดินไปมา
     JUMPING: 'JUMPING',   // กำลังโดด
-    RUNNING: 'RUNNING'    // วิ่งหนีออกซ้าย
+    RUNNING: 'RUNNING',    // วิ่งหนีออกซ้าย
+    ZERO_GRAVITY: 'ZERO_GRAVITY' // ไม่มีแรงโน้มถ่วง
 };

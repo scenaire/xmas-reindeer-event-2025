@@ -63,6 +63,13 @@ class ReindeerApp {
                 case 'SPAWN':
                     this.spawnReindeer(data);
                     break;
+                case 'FIND_DEER':
+                    const reindeer = this.reindeerMap.get(owner);
+                    if (reindeer) {
+                        reindeer.jump();
+                        reindeer.showNametag();
+                    }
+                    break;
                 case 'UPDATE_WISH':
                     if (this.reindeerMap.has(owner)) {
                         this.reindeerMap.get(owner).addWish(wish, bubbleType);
@@ -91,6 +98,8 @@ class ReindeerApp {
                 this.reindeerMap.forEach(r => r.runAway('left'));
             } else if (cmd.type === 'RUN_RIGHT') {
                 this.reindeerMap.forEach(r => r.runAway('right'));
+            } else if (cmd.type === 'ZERO_GRAVITY') {
+                this.reindeerMap.forEach(reindeer => reindeer.enableZeroGravity());
             }
         });
     }
