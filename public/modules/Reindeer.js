@@ -3,22 +3,20 @@ import { ChatBubble } from './ChatBubble.js';
 
 export class Reindeer extends PIXI.AnimatedSprite {
     constructor(data, assetManager) {
-        // 1. ดึงเฟรมมาเช็คก่อน ถ้าไม่มี ให้ใช้ภาพขาวเปล่าๆ แก้ขัด (กัน Error ตอนเริ่ม)
+        // ... (ส่วนโหลดเฟรมเดิม) ...
         let initialFrames = assetManager.getAnimation(data.rarity, 'idle');
         if (!initialFrames || initialFrames.length === 0) {
-            console.warn(`⚠️ Texture missing for ${data.rarity}, using fallback.`);
             initialFrames = [PIXI.Texture.WHITE];
         }
-
         super(initialFrames);
 
         this.data = data;
         this.assetManager = assetManager;
-        this.autoUpdate = false; // ปิด autoUpdate เพื่อคุมเอง
+        this.autoUpdate = false;
         this.animationSpeed = CONFIG.ANIMATION.SPEED || 0.1;
         this.loop = true;
 
-        // ... (ส่วนตั้งค่าตำแหน่งเดิมของคุณ Nair) ...
+        // ตั้งค่าตำแหน่งและสถานะ
         const startAtLeft = Math.random() < 0.5;
         this.x = startAtLeft ? -100 : CONFIG.SCREEN_WIDTH + 100;
         this.y = CONFIG.GROUND_Y + (Math.random() * 30);
@@ -26,17 +24,17 @@ export class Reindeer extends PIXI.AnimatedSprite {
         this.targetX = 50 + Math.random() * (CONFIG.SCREEN_WIDTH - 100);
         this.idleTimer = null;
 
-        // ...jumping
         this.baseY = this.y;
         this.vy_jump = 0;
         this.isJumping = false;
+        this.zeroGravAlpha = 0;
+        this.floatTimer = Math.random() * 10;
+        this.driftVx = (Math.random() - 0.5) * 2;
 
-        //zero gravity
-        this.floatTimer = Math.random() * 10; //สุ่มจุดเริ่มต้นการลอย
 
         this.setupProperties();
+        this.createUI();
 
-        // เช็คว่ามีเฟรมจริงไหมค่อยสั่งเล่น
         if (initialFrames.length > 1) this.play();
     }
 
@@ -55,10 +53,11 @@ export class Reindeer extends PIXI.AnimatedSprite {
     update(delta) {
         if (this.destroyed) return;
 
-        // ... (Logic การเดินเดิมของคุณ Nair) ...
-        if (this.state === 'zero_gravity') {
+        // ✅ 2. แก้ไขการเช็คสถานะให้ตรงกับ Constants (STATES.ZERO_GRAVITY)
+        if (this.state === STATES.ZERO_GRAVITY) {
             this.handleZeroGravity(delta);
         } else {
+            // Logic การเดินเดิม
             if (this.state === 'moving') {
                 const dx = this.targetX - this.x;
                 if (Math.abs(dx) < 5) {
@@ -80,9 +79,10 @@ export class Reindeer extends PIXI.AnimatedSprite {
                     this.targetX = 50 + Math.random() * (CONFIG.SCREEN_WIDTH - 100);
                 }
             }
-            this.rotation = 0;
+            this.rotation = 0; // คืนค่าตัวตรงเมื่อไม่อยู่ในอวกาศ
         }
 
+        // Logic กระโดด
         if (this.isJumping) {
             this.vy_jump += CONFIG.GRAVITY * delta;
             this.y += this.vy_jump * delta;
@@ -99,8 +99,6 @@ export class Reindeer extends PIXI.AnimatedSprite {
             this.scale.x = Math.sign(this.vx) * Math.abs(this.scale.x);
         }
 
-        // ✅ จุดแก้สำคัญ: เช็คก่อนว่ามี Texture ให้เล่นไหม
-        // ถ้า Texture หาย หรือ array ว่างเปล่า ห้ามเรียก super.update เด็ดขาด!
         if (this.playing && this.textures && this.textures.length > 0 && this.textures[this.currentFrame]) {
             super.update(delta);
         }
@@ -141,7 +139,7 @@ export class Reindeer extends PIXI.AnimatedSprite {
         this.vy_jump = CONFIG.JUMP_FORCE;
     }
 
-    showNameTag() {
+    showNametag() {
         if (this.nameTag) {
             this.nameTag.visible = true;
 
@@ -160,34 +158,59 @@ export class Reindeer extends PIXI.AnimatedSprite {
     }
 
     handleZeroGravity(delta) {
-        this.vx = 0; // ไม่เดินไปไหน
+        // ✅ 1. ค่อยๆ เพิ่มแรงลอยตัว (0 -> 1) เพื่อให้กวางค่อยๆ ลอยขึ้นจากพื้น
+        if (this.zeroGravAlpha < 1) {
+            this.zeroGravAlpha += 0.01 * delta; // ปรับตัวเลขนี้ให้ลอยขึ้นช้าหรือเร็วตามใจชอบค่ะ
+        }
+
         this.floatTimer += CONFIG.ZERO_GRAVITY_SPEED * delta;
 
-        // 1. ลอยขึ้น-ลงนุ่มๆ (Sine Wave)
-        this.y = this.baseY - 50 + (Math.sin(this.floatTimer) * CONFIG.ZERO_GRAVITY_AMPLITUDE);
+        // ✅ 2. คำนวณความสูง (Lift height) 
+        // ให้ลอยขึ้นจากพื้น baseY ประมาณ 100-150px แบบนุ่มนวลตามค่า Alpha
+        const liftTarget = 120 * this.zeroGravAlpha;
+        const bobbing = Math.sin(this.floatTimer) * CONFIG.ZERO_GRAVITY_AMPLITUDE;
+        this.y = this.baseY - liftTarget + bobbing;
 
-        // 2. ขยับซ้าย-ขวานิดหน่อยให้ดูไร้ทิศทาง
-        this.x += Math.cos(this.floatTimer * 0.5) * 0.5;
+        // ✅ 3. ลอยไปลอยมาในจอ (Drifting)
+        // เคลื่อนที่ตามแรงเฉื่อย driftVx
+        this.x += this.driftVx * delta;
 
-        // 3. หมุนตัวเอียงไปมา (Space feeling)
-        this.rotation = Math.sin(this.floatTimer * 0.7) * 0.15;
+        // กันชนขอบจอ: ถ้าลอยไปชนขอบ ให้เด้งกลับนุ่มๆ
+        if (this.x < 100) {
+            this.driftVx = Math.abs(this.driftVx);
+        } else if (this.x > CONFIG.SCREEN_WIDTH - 100) {
+            this.driftVx = -Math.abs(this.driftVx);
+        }
+
+        // ✅ 4. หมุนเอียงตัว (Space rotation)
+        // จะเอียงมากขึ้นเมื่อลอยสูงขึ้น
+        this.rotation = Math.sin(this.floatTimer * 0.7) * (0.2 * this.zeroGravAlpha);
 
         this.updateAnimation('idle'); // ใช้ท่า Idle ตอนลอย
+        this.vx = 0; // หยุดเดินปกติ
     }
 
     // ฟังก์ชันเปิดโหมดอวกาศ
-    enableZeroGravity(duration = 30000) {
-        const previousState = this.state;
+    enableZeroGravity(duration = CONFIG.ZERO_GRAVITY_DURATION) {
+        this.zeroGravAlpha = 0; // รีเซ็ตค่าการเริ่มลอยใหม่ทุกครั้ง
         this.state = STATES.ZERO_GRAVITY;
 
-        // ถ้าอยากให้มีเวลาจำกัด (เช่น 30 วินาทีแล้วกลับมาเดินปกติ)
-        setTimeout(() => {
+        // สุ่มทิศทางการลอยใหม่ให้ดูไม่ซ้ำกัน
+        this.driftVx = (Math.random() - 0.5) * 1.5;
+
+        if (this.zeroGravTimeout) clearTimeout(this.zeroGravTimeout);
+        this.zeroGravTimeout = setTimeout(() => {
             if (!this.destroyed && this.state === STATES.ZERO_GRAVITY) {
-                this.state = 'moving';
-                this.y = this.baseY; // กลับลงพื้น
-                this.rotation = 0;
+                this.returnToGround();
             }
         }, duration);
+    }
+
+    returnToGround() {
+        this.state = 'moving';
+        this.y = this.baseY;
+        this.rotation = 0;
+        this.zeroGravAlpha = 0;
     }
 
     destroy(options) {

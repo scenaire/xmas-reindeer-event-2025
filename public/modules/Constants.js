@@ -19,6 +19,7 @@ export const CONFIG = {
     JUMP_FORCE: -12,
     ZERO_GRAVITY_SPEED: 0.05, //ความเร็วการลอย
     ZERO_GRAVITY_AMPLITUDE: 30, //ระยะการลอย (px)
+    ZERO_GRAVITY_DURATION: 30000, //เวลาลอย
 
     // --- 🎨 Visuals & Scales ---
     SCALES: {
