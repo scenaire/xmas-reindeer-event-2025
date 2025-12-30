@@ -46,7 +46,7 @@ export const CONFIG = {
     NAME_TAG: {
         DISPLAY_DURATION: 10000,
         FONT_FAMILY: 'Daydream',
-        FONT_SIZE: 16,
+        FONT_SIZE: 14,
         FONT_WEIGHT: 'normal',
         FONT_COLOR: '#352520ff',
         FADE_SPEED: 0.02,

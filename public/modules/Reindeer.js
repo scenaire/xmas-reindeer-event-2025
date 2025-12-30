@@ -260,7 +260,7 @@ export class Reindeer extends PIXI.AnimatedSprite {
         if (this.nameTag) {
             this.nameTag.visible = true;
             this.nameTag.alpha = 1;
-            this.nameTagVisibleTime = CONFIG.NAME_TAG_DISPLAY_DURATION;
+            this.nameTagVisibleTime = CONFIG.NAME_TAG.DISPLAY_DURATION;
         }
     }
 
