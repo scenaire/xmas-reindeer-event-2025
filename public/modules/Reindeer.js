@@ -62,6 +62,11 @@ export class Reindeer extends PIXI.AnimatedSprite {
             this.handleWalkingAndRunning(delta);
         }
 
+        // Bubble
+        if (this.bubbleElement) {
+            this.syncBubblePosition();
+        }
+
         const inverseScaleX = Math.sign(this.scale.x);
         // ✅ ลบการกลับด้านป้ายชื่อออก (ชื่อจะตรงตลอดเวลา)
         if (this.bubble) this.bubble.scale.x = inverseScaleX;
@@ -224,6 +229,7 @@ export class Reindeer extends PIXI.AnimatedSprite {
 
     destroy(options) {
         if (this.idleTimer) clearTimeout(this.idleTimer);
+        this.removeBubble();
         super.destroy(options);
     }
 
@@ -264,11 +270,59 @@ export class Reindeer extends PIXI.AnimatedSprite {
         }
     }
 
-    addWish(text, type) {
-        if (this.bubble) this.removeChild(this.bubble);
-        const assets = this.assetManager.getBubbleAssets();
-        this.bubble = new ChatBubble(text, type, assets);
-        this.addChild(this.bubble);
-        this.bubble.destroyWithDelay(CONFIG.WISH_DURATION || 15000);
+    addWish(text, type = 'default') {
+        // ลบ Bubble เก่าออกก่อน (ถ้ามี)
+        this.removeBubble();
+
+        // ดึงค่า Config จาก Constants (เช่น สีฟอนต์, ไฟล์ภาพ Box/Tail)
+        const config = CONFIG.BUBBLE_TYPES[type] || CONFIG.BUBBLE_TYPES.default;
+
+        // สร้าง DOM Element สำหรับ Bubble
+        this.bubbleElement = document.createElement('div');
+        this.bubbleElement.className = `wish-bubble ${type}`;
+
+        // ใส่เนื้อหา (รองรับ HTML สำหรับ Emote ในอนาคต)
+        this.bubbleElement.innerHTML = `
+        <div class="bubble-content" style="color: ${config.fontColor}">
+            ${text}
+        </div>
+        <div class="bubble-tail" style="background-image: url('/assets/bubble/${config.tail}')"></div>
+    `;
+
+        // นำไปใส่ใน Container เหนือ Canvas
+        document.getElementById('bubble-container').appendChild(this.bubbleElement);
+
+        // ตั้งเวลาลบ (ใช้ค่าจาก Constants)
+        setTimeout(() => this.removeBubble(), CONFIG.WISH_DURATION || 15000);
+    }
+
+    syncBubblePosition() {
+        if (!this.bubbleElement) return;
+
+        // ดึงพิกัดจริงจาก Pixi Stage
+        const globalPos = this.getGlobalPosition();
+
+        // ปรับตำแหน่งให้อยู่เหนือหัวกวาง (ลบค่าความสูงกวางออก)
+        const x = globalPos.x;
+        const y = globalPos.y - (this.height + 20);
+
+        // ✅ ใช้ translate3d เพื่อความลื่นไหล (GPU Accelerated)
+        this.bubbleElement.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${this.scale.x > 0 ? 1 : -1}, 1)`;
+
+        // ป้องกันข้อความกลับด้านตามกวาง
+        const content = this.bubbleElement.querySelector('.bubble-content');
+        if (content) content.style.transform = `scale(${this.scale.x > 0 ? 1 : -1}, 1)`;
+    }
+
+    removeBubble() {
+        if (this.bubbleElement) {
+            this.bubbleElement.classList.add('fade-out');
+            setTimeout(() => {
+                if (this.bubbleElement && this.bubbleElement.parentNode) {
+                    this.bubbleElement.parentNode.removeChild(this.bubbleElement);
+                }
+                this.bubbleElement = null;
+            }, 500);
+        }
     }
 }

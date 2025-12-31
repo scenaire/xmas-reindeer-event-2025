@@ -86,20 +86,33 @@ export class RewardHandler {
     // --- ✨ Handler สำหรับการขอพร (Wish) ---
     handleWish(data) {
         const userName = data.user_name;
+        const wishText = data.user_input;
+
+        // ✅ 1. แก้ไขการเรียก DataManager (ลบ this. ออก และใช้ getGameState)
         const gameState = dataManager.getGameState();
+        const reindeerData = gameState[userName]; // ดึงข้อมูลกวางจาก State กลาง
 
-        if (gameState[userName]) {
-            gameState[userName].wish = data.user_input;
-            gameState[userName].bubbleType = this.analyzeWishType(data.user_input);
-
-            dataManager.updateGameState(userName, gameState[userName]);
-            this.io.emit('game_event', {
-                type: 'UPDATE_WISH',
-                owner: userName,
-                wish: data.user_input,
-                bubbleType: gameState[userName].bubbleType
-            });
+        if (!reindeerData) {
+            console.log(`⚠️ [Wish] ${userName} พยายามอธิษฐานแต่ไม่มีกวางในจอค่ะ`);
+            return; // จบการทำงาน ไม่ส่ง Event ไปที่หน้าจอ
         }
+
+        // ✅ 2. วิเคราะห์และอัปเดตข้อมูล
+        const bubbleType = this.analyzeWishType(wishText);
+
+        reindeerData.wish = wishText;
+        reindeerData.bubbleType = bubbleType;
+
+        // ✅ 3. บันทึก (ลบ this. ออก และใช้ updateGameState)
+        dataManager.updateGameState(userName, reindeerData);
+
+        // ส่งข้อมูลไปที่หน้าจอ
+        this.io.emit('game_event', {
+            type: 'UPDATE_WISH',
+            owner: userName,
+            wish: wishText,
+            bubbleType: bubbleType
+        });
     }
 
     // --- 🎨 Handler สำหรับการเปลี่ยนชุด (Change Skin) ---

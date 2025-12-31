@@ -68,7 +68,35 @@ export const CONFIG = {
             'Epic': 'texture_0',
             'Mythic': 'texture_0'
         }
-    }
+    },
+
+    BUBBLE_TYPES: {
+        default: {
+            class: 'bubble-default',
+            fontColor: '#352520',
+            box: 'bubble_box.png',
+            tail: 'bubble_tail.png'
+        },
+        chaos: {
+            class: 'bubble-chaos',
+            fontColor: '#ffffff',
+            box: 'bubble_box_chaos.png',
+            tail: 'bubble_tail_chaos.png'
+        },
+        love: {
+            class: 'bubble-love',
+            fontColor: '#ff4b82',
+            box: 'bubble_box_love.png',
+            tail: 'bubble_tail_love.png'
+        },
+        money: {
+            class: 'bubble-money',
+            fontColor: '#a7690dff',
+            box: 'bubble_box_money.png',
+            tail: 'bubble_tail_money.png'
+        }
+    },
+
 };
 
 // สถานะการเคลื่อนที่ของกวาง
