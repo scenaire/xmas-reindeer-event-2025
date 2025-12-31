@@ -1,96 +1,64 @@
+// public/modules/ChatBubble.js
 import { CONFIG } from './Constants.js';
 
-/**
- * ChatBubble - กล่องข้อความขอพรสุดน่ารัก
- * สามารถปรับขนาดได้อัตโนมัติ (Dynamic Resizing) ตามความยาวข้อความค่ะ
- */
-export class ChatBubble extends PIXI.Container {
-    constructor(text, type, assets) {
-        super();
-        this.assets = assets; // รับ { box, tail } มาจาก AssetManager
-        this.type = type;
-        this.visible = false; // ซ่อนไว้ก่อนจนกว่าจะสร้างเสร็จค่ะ
+export class ChatBubble {
+    constructor(text, type = 'default') {
+        this.element = null;
+        this.isDestroyed = false;
 
-        this.setupBubble(text);
+        // 1. ดึง Config
+        const bubbleConfig = CONFIG.BUBBLE_TYPES[type] || CONFIG.BUBBLE_TYPES['default'];
+        const fontConfig = CONFIG.CHAT_BUBBLE || { FONT_FAMILY: 'Arial', FONT_SIZE: 16 };
+
+        // 2. สร้าง DOM Element
+        this.createDOM(text, bubbleConfig, fontConfig);
     }
 
-    setupBubble(text) {
-        // 1. สร้างข้อความ (Text)
-        const textStyle = new PIXI.TextStyle({
-            fontFamily: 'Arial',
-            fontSize: 20,
-            fill: '#333333',
-            align: 'center',
-            wordWrap: true,
-            wordWrapWidth: 200
-        });
+    createDOM(text, bubbleConfig, fontConfig) {
+        const div = document.createElement('div');
+        div.className = `wish-bubble bubble-${bubbleConfig.class || 'default'}`;
 
-        const message = new PIXI.Text(text, textStyle);
-        message.anchor.set(0.5);
+        // ใส่ข้อความ (รองรับ HTML Emote ได้เลย!)
+        div.innerHTML = text;
 
-        // 2. เลือกสีกล่องตามประเภท (Type)
-        const tintColor = this.getTintColor(this.type);
+        // Inject CSS Variables เพื่อเปลี่ยนรูปและสี
+        div.style.setProperty('--box-bg', `url('${bubbleConfig.box}')`);
+        div.style.setProperty('--tail-bg', `url('${bubbleConfig.tail}')`);
+        div.style.setProperty('--font-color', bubbleConfig.fontColor);
+        div.style.setProperty('--font-family', fontConfig.FONT_FAMILY);
+        div.style.setProperty('--font-size', `${fontConfig.FONT_SIZE}px`);
 
-        // 3. สร้างตัวกล่อง (ใช้ NineSlicePlane เพื่อให้ขอบไม่เบลอเวลาขยายค่ะ)
-        const padding = 20;
-        const boxWidth = Math.max(60, message.width + padding * 2);
-        const boxHeight = message.height + padding * 1.5;
-
-        const box = new PIXI.NineSlicePlane(this.assets.box, 15, 15, 15, 15);
-        box.width = boxWidth;
-        box.height = boxHeight;
-        box.tint = tintColor;
-        box.pivot.set(boxWidth / 2, boxHeight); // ให้จุดหมุนอยู่กลางล่าง
-
-        // 4. สร้างหางของ Bubble
-        const tail = new PIXI.Sprite(this.assets.tail);
-        tail.anchor.set(0.5, 0);
-        tail.tint = tintColor;
-        tail.y = -2; // เชื่อมกับก้นกล่อง
-
-        // 5. ประกอบร่าง!
-        this.addChild(box);
-        this.addChild(tail);
-        this.addChild(message);
-
-        // จัดตำแหน่งข้อความให้อยู่กลางกล่อง
-        message.y = -boxHeight / 2;
-
-        // ขยับ Bubble ขึ้นไปเหนือหัวกวาง
-        this.y = -120;
-
-        this.visible = true;
-        this.animateIn();
+        // เอาไปแปะใน Container หน้าเว็บ
+        document.getElementById('bubble-container').appendChild(div);
+        this.element = div;
     }
 
-    getTintColor(type) {
-        const colors = {
-            'love': 0xFFB7CE,  // สีชมพูหวานๆ
-            'lucky': 0xFFD700, // สีทองรวยๆ
-            'normal': 0xFFFFFF // สีขาวสะอาดตา
-        };
-        return colors[type] || colors.normal;
+    /**
+     * ฟังก์ชันสำคัญ! อัปเดตตำแหน่ง div ให้ตรงกับกวาง
+     * @param {number} x - พิกัด X ของกวาง
+     * @param {number} y - พิกัด Y ของกวาง
+     */
+    updatePosition(x, y) {
+        if (!this.element || this.isDestroyed) return;
+
+        // คำนวณตำแหน่ง (ปรับ offset ตรงนี้ได้)
+        const bubbleX = x;
+        const bubbleY = y - 130; // ลอยเหนือหัวกวาง 130px
+
+        // ใช้ transform: translate จะลื่นกว่า top/left มากๆ
+        // ลบ 50% ของความกว้างตัวเองออก เพื่อให้จุดกึ่งกลางตรงกับหัวกวาง
+        const offsetX = this.element.offsetWidth / 2;
+        const offsetY = this.element.offsetHeight;
+
+        this.element.style.left = `${bubbleX - offsetX}px`;
+        this.element.style.top = `${bubbleY - offsetY}px`;
     }
 
-    animateIn() {
-        this.scale.set(0);
-        // ใช้ Simple Animation (ในโปรเจกต์จริงอาจใช้ GSAP ได้ค่ะ)
-        const ticker = (delta) => {
-            if (this.scale.x < 1) {
-                this.scale.x += 0.1 * delta;
-                this.scale.y += 0.1 * delta;
-            } else {
-                this.scale.set(1);
-                PIXI.Ticker.shared.remove(ticker);
-            }
-        };
-        PIXI.Ticker.shared.add(ticker);
-    }
-
-    // ทำลายตัวเองเมื่อหมดเวลา
-    destroyWithDelay(ms) {
-        setTimeout(() => {
-            if (this.parent) this.parent.removeChild(this);
-        }, ms);
+    destroy() {
+        if (this.element && this.element.parentNode) {
+            this.element.parentNode.removeChild(this.element);
+        }
+        this.element = null;
+        this.isDestroyed = true;
     }
 }

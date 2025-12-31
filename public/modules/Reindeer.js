@@ -34,6 +34,9 @@ export class Reindeer extends PIXI.AnimatedSprite {
         //NameTag
         this.nameTagVisibleTime = 0;
 
+        //bubble
+        this.bubble = null;
+
         this.setupProperties();
 
         if (initialFrames.length > 1) this.play();
@@ -68,8 +71,6 @@ export class Reindeer extends PIXI.AnimatedSprite {
         }
 
         const inverseScaleX = Math.sign(this.scale.x);
-        // ✅ ลบการกลับด้านป้ายชื่อออก (ชื่อจะตรงตลอดเวลา)
-        if (this.bubble) this.bubble.scale.x = inverseScaleX;
 
         // ระบบ Fade Out (เช็คชื่อตัวแปรให้ตรงกับ Constants)
         if (this.nameTag && this.nameTag.visible) {
@@ -229,7 +230,7 @@ export class Reindeer extends PIXI.AnimatedSprite {
 
     destroy(options) {
         if (this.idleTimer) clearTimeout(this.idleTimer);
-        this.removeBubble();
+        this.removeBubble(true);
         super.destroy(options);
     }
 
@@ -271,58 +272,76 @@ export class Reindeer extends PIXI.AnimatedSprite {
     }
 
     addWish(text, type = 'default') {
-        // ลบ Bubble เก่าออกก่อน (ถ้ามี)
-        this.removeBubble();
+        // 1. ล้างของเก่าทิ้งทันที (แบบไม่รีรอ) เพื่อกันบับเบิ้ลซ้อน/ค้าง
+        this.removeBubble(true); // true = ลบทันทีไม่ต้องรอ Fade
 
-        // ดึงค่า Config จาก Constants (เช่น สีฟอนต์, ไฟล์ภาพ Box/Tail)
         const config = CONFIG.BUBBLE_TYPES[type] || CONFIG.BUBBLE_TYPES.default;
 
-        // สร้าง DOM Element สำหรับ Bubble
+        // 2. สร้าง Element ใหม่
         this.bubbleElement = document.createElement('div');
-        this.bubbleElement.className = `wish-bubble ${type}`;
+        this.bubbleElement.className = `wish-bubble ${config.class || ''}`;
 
-        // ใส่เนื้อหา (รองรับ HTML สำหรับ Emote ในอนาคต)
-        this.bubbleElement.innerHTML = `
-        <div class="bubble-content" style="color: ${config.fontColor}">
-            ${text}
-        </div>
-        <div class="bubble-tail" style="background-image: url('/assets/bubble/${config.tail}')"></div>
-    `;
+        const boxPath = `./assets/bubble/${config.box}`;
+        const tailPath = `./assets/bubble/${config.tail}`;
 
-        // นำไปใส่ใน Container เหนือ Canvas
+        this.bubbleElement.style.setProperty('--box-bg', `url('${boxPath}')`);
+        this.bubbleElement.style.setProperty('--tail-bg', `url('${tailPath}')`);
+        this.bubbleElement.style.setProperty('--font-color', config.fontColor);
+        this.bubbleElement.style.setProperty('--bg-color', config.backgroundColor || '#ffffff');
+
+        // ใส่เนื้อหา
+        this.bubbleElement.innerHTML = `<div class="bubble-content">${text}</div>`;
+
         document.getElementById('bubble-container').appendChild(this.bubbleElement);
 
-        // ตั้งเวลาลบ (ใช้ค่าจาก Constants)
-        setTimeout(() => this.removeBubble(), CONFIG.WISH_DURATION || 15000);
+        // 3. จัดตำแหน่งทันที 1 ครั้ง (กันแว๊บผิดที่)
+        this.syncBubblePosition();
+
+        // 4. ตั้งเวลาลบ (และเก็บ ID ไว้เพื่อยกเลิกถ้ามีอันใหม่มาแทรก)
+        this.bubbleTimer = setTimeout(() => {
+            this.removeBubble(false); // false = ให้ Fade out สวยๆ เมื่อหมดเวลา
+        }, CONFIG.WISH_DURATION || 15000);
     }
 
     syncBubblePosition() {
         if (!this.bubbleElement) return;
 
-        // ดึงพิกัดจริงจาก Pixi Stage
+        // ดึงพิกัดจริงจาก Pixi
         const globalPos = this.getGlobalPosition();
 
-        // ปรับตำแหน่งให้อยู่เหนือหัวกวาง (ลบค่าความสูงกวางออก)
+        // 1. ปรับแกน X: ไม่ต้องทำอะไรมาก เดี๋ยวใช้ CSS ดึงกลับมาตรงกลางเอง
         const x = globalPos.x;
-        const y = globalPos.y - (this.height + 20);
 
-        // ✅ ใช้ translate3d เพื่อความลื่นไหล (GPU Accelerated)
-        this.bubbleElement.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${this.scale.x > 0 ? 1 : -1}, 1)`;
+        // 2. ปรับแกน Y: เอาแค่ระดับ "เท้า" ลบด้วย "ความสูงตัวกวาง" (ประมาณ 100-110px)
+        // ถ้ายังสูงไป ให้ลดเลข 110 ลงเหลือ 100 หรือ 90 นะคะ
+        const y = globalPos.y - 110;
 
-        // ป้องกันข้อความกลับด้านตามกวาง
-        const content = this.bubbleElement.querySelector('.bubble-content');
-        if (content) content.style.transform = `scale(${this.scale.x > 0 ? 1 : -1}, 1)`;
+        // 3. ใช้ transform จัดตำแหน่ง + จัดกึ่งกลาง (สำคัญมาก!)
+        // translate3d(x, y, 0) -> ย้ายไปตำแหน่ง
+        // translate(-50%, -100%) -> ดึงกลับมาซ้าย 50% และดึงขึ้น 100% (เพื่อให้จุด y คือก้นกล่อง)
+        this.bubbleElement.style.transform = `translate3d(${x}px, ${y}px, 0) translate(-50%, -100%)`;
     }
 
-    removeBubble() {
+    removeBubble(immediate = true) {
+        // 1. ยกเลิก Timer เก่าก่อนเสมอ (สำคัญมาก! แก้บั๊กบับเบิ้ลค้าง)
+        if (this.bubbleTimer) {
+            clearTimeout(this.bubbleTimer);
+            this.bubbleTimer = null;
+        }
+
+        // 2. ถ้ามีบับเบิ้ลอยู่ จัดการมัน
         if (this.bubbleElement) {
-            this.bubbleElement.classList.add('fade-out');
-            setTimeout(() => {
-                if (this.bubbleElement && this.bubbleElement.parentNode) {
-                    this.bubbleElement.parentNode.removeChild(this.bubbleElement);
-                }
-                this.bubbleElement = null;
-            }, 500);
+            const el = this.bubbleElement;
+            this.bubbleElement = null; // ตัดความสัมพันธ์ทันที (จะได้หยุด Sync)
+
+            if (immediate) {
+                // ถ้าสั่งลบทันที (เช่น มีอันใหม่มาแทน) -> ลบเลย
+                el.remove();
+            } else {
+                // ถ้าหมดเวลาตามธรรมชาติ -> ค่อยๆ จางหาย
+                el.classList.add('fade-out');
+                setTimeout(() => el.remove(), 500); // ลบจริงหลัง Fade จบ
+            }
         }
     }
 }

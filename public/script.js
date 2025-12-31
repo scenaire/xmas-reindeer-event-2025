@@ -1,6 +1,7 @@
 import { CONFIG, STATES } from './modules/Constants.js';
 import { AssetManager } from './modules/AssetManager.js';
 import { Reindeer } from './modules/Reindeer.js';
+import { analyzeWish } from './modules/WishAnalyzer.js';
 
 // ลดการสั่นสะเทือนของ PIXI
 PIXI.settings.SCALE_MODE = PIXI.SCALE_MODES.NEAREST;
@@ -79,8 +80,14 @@ class ReindeerApp {
                     }
                     break;
                 case 'UPDATE_WISH':
+                    let bubbleType = 'default';
+                    if (event.wish) {
+                        bubbleType = analyzeWish(event.wish);
+                    }
                     if (this.reindeerMap.has(owner)) {
                         this.reindeerMap.get(owner).addWish(wish, bubbleType);
+                    } else {
+                        console.error(`ไม่พบตัวน้องกวางของ ${owner} ไม่สามารถเพิ่มคำอวยพรได้`);
                     }
                     break;
                 case 'UPDATE_SKIN':

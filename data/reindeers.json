@@ -7,5 +7,77 @@
     "behavior": "normal",
     "bubbleType": "normal",
     "timestamp": 1767041595905
+  },
+  {
+    "owner": "c_nairs",
+    "wish": "",
+    "rarity": "Uncommon",
+    "image": "texture_1.png",
+    "behavior": "normal",
+    "bubbleType": "normal",
+    "timestamp": 1767187656192
+  },
+  {
+    "owner": "c_nairs",
+    "wish": "",
+    "rarity": "Common",
+    "image": "texture_0.png",
+    "behavior": "normal",
+    "bubbleType": "normal",
+    "timestamp": 1767187670253
+  },
+  {
+    "owner": "c_nairs",
+    "wish": "",
+    "rarity": "Common",
+    "image": "texture_0.png",
+    "behavior": "normal",
+    "bubbleType": "normal",
+    "timestamp": 1767187687825
+  },
+  {
+    "owner": "c_nairs",
+    "wish": "",
+    "rarity": "Rare",
+    "image": "texture_2.png",
+    "behavior": "shy",
+    "bubbleType": "normal",
+    "timestamp": 1767187698204
+  },
+  {
+    "owner": "c_nairs",
+    "wish": "",
+    "rarity": "Common",
+    "image": "texture_0.png",
+    "behavior": "normal",
+    "bubbleType": "normal",
+    "timestamp": 1767188458262
+  },
+  {
+    "owner": "c_nairs",
+    "wish": "",
+    "rarity": "Common",
+    "image": "texture_0.png",
+    "behavior": "normal",
+    "bubbleType": "normal",
+    "timestamp": 1767188481235
+  },
+  {
+    "owner": "c_nairs",
+    "wish": "",
+    "rarity": "Common",
+    "image": "texture_0.png",
+    "behavior": "normal",
+    "bubbleType": "normal",
+    "timestamp": 1767188490645
+  },
+  {
+    "owner": "c_nairs",
+    "wish": "",
+    "rarity": "Uncommon",
+    "image": "texture_1.png",
+    "behavior": "normal",
+    "bubbleType": "normal",
+    "timestamp": 1767188501140
   }
 ]

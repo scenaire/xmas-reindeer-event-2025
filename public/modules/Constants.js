@@ -75,25 +75,29 @@ export const CONFIG = {
             class: 'bubble-default',
             fontColor: '#352520',
             box: 'bubble_box.png',
-            tail: 'bubble_tail.png'
+            tail: 'bubble_tail.png',
+            backgroundColor: '#ffffff',
         },
         chaos: {
             class: 'bubble-chaos',
             fontColor: '#ffffff',
             box: 'bubble_box_chaos.png',
-            tail: 'bubble_tail_chaos.png'
+            tail: 'bubble_tail_chaos.png',
+            backgroundColor: '#48256d',
         },
         love: {
             class: 'bubble-love',
             fontColor: '#ff4b82',
             box: 'bubble_box_love.png',
-            tail: 'bubble_tail_love.png'
+            tail: 'bubble_tail_love.png',
+            backgroundColor: '#facde4',
         },
         money: {
             class: 'bubble-money',
             fontColor: '#a7690dff',
             box: 'bubble_box_money.png',
-            tail: 'bubble_tail_money.png'
+            tail: 'bubble_tail_money.png',
+            backgroundColor: '#ffeca1',
         }
     },
 
