@@ -48,7 +48,9 @@ class ReindeerApp {
         this.isReady = true;
 
         // 4. เริ่ม Game Loop
-        this.app.ticker.add((delta) => this.update(delta));
+        this.app.ticker.add((delta) => {
+            this.update(delta)
+        });
 
         console.log("✨ [System] ทุกอย่างพร้อมแล้ว! ขอให้เป็นสตรีมที่ยอดเยี่ยมนะคะ");
     }
@@ -69,25 +71,67 @@ class ReindeerApp {
             const { type, data, owner, wish, bubbleType } = event;
 
             switch (type) {
+                case 'DUPLICATE':
+                    // กรณีได้ตัวซ้ำ/เกลือ -> ให้ตัวเดิมกระโดด 1 ที
+                    const dupDeer = this.reindeerMap.get(owner);
+                    if (dupDeer) {
+                        dupDeer.jump();
+                        dupDeer.showNametag();
+
+                        if (event.wish) {
+                            dupDeer.addWish(event.wish, event.bubbleType);
+                        }
+                    }
+                    break;
                 case 'SPAWN':
-                    this.spawnReindeer(data);
+                    // เช็คว่าเป็น Upgrade ไหม?
+                    if (event.isUpgrade) {
+                        const oldDeer = this.reindeerMap.get(owner);
+                        if (oldDeer) {
+                            // 1. สั่งตัวเก่าวิ่งหนีไปทางขวา (Leaving)
+                            oldDeer.runAway('right');
+
+                            // 2. รอ 2 วินาที (ให้วิ่งพ้นจอ) แล้วค่อยลบ + สร้างตัวใหม่
+                            setTimeout(() => {
+                                this.removeReindeer(owner);
+
+                                // 3. สร้างตัวใหม่ โดยบังคับให้เข้าจากทางขวา (forceSide: 'right')
+                                // เราต้องแก้ spawnReindeer ให้รับ parameter เพิ่ม หรือยัดลง data
+                                data.forceSide = 'right';
+                                this.spawnReindeer(data);
+                            }, 2000);
+                        } else {
+                            this.spawnReindeer(data);
+                        }
+                    } else {
+                        // ถ้าเพิ่งเกิดครั้งแรก ก็เกิดปกติ
+                        this.spawnReindeer(data);
+                    }
                     break;
                 case 'FIND_DEER':
-                    const reindeer = this.reindeerMap.get(owner);
-                    if (reindeer) {
-                        reindeer.jump();
-                        reindeer.showNametag();
+                    const wishToShow = event.wish;
+                    const typeToShow = event.bubbleType;
+
+                    // หาตัวกวาง (แก้ this.reindeerMap ให้ตรงกับตัวแปรของคุณ)
+                    const foundDeer = this.reindeerMap.get(owner);
+
+                    if (foundDeer) {
+                        // ท่าทางพื้นฐาน
+                        foundDeer.jump();
+                        foundDeer.showNametag();
+
+                        // ✅ 2. เพิ่มเงื่อนไข: ถ้ามีคำขอพรส่งมาด้วย ให้โชว์ Bubble เลย!
+                        if (wishToShow) {
+                            foundDeer.addWish(wishToShow, typeToShow);
+                        }
                     }
                     break;
-                case 'UPDATE_WISH':
-                    let bubbleType = 'default';
-                    if (event.wish) {
-                        bubbleType = analyzeWish(event.wish);
-                    }
+                case 'wish':
                     if (this.reindeerMap.has(owner)) {
+                        // ส่ง HTML (wish) และประเภท (bubbleType) เข้าไปตรงๆ
                         this.reindeerMap.get(owner).addWish(wish, bubbleType);
                     } else {
-                        console.error(`ไม่พบตัวน้องกวางของ ${owner} ไม่สามารถเพิ่มคำอวยพรได้`);
+                        console.warn(`⚠️ ไม่พบตัวน้องกวางของ ${owner} ไม่สามารถเพิ่มคำอวยพรได้`);
                     }
                     break;
                 case 'UPDATE_SKIN':

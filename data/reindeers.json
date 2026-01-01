@@ -1,83 +1,236 @@
 [
   {
-    "owner": "c_nairs",
-    "wish": "",
-    "rarity": "Uncommon",
-    "image": "texture_1.png",
-    "behavior": "normal",
-    "bubbleType": "normal",
-    "timestamp": 1767041595905
-  },
-  {
-    "owner": "c_nairs",
-    "wish": "",
-    "rarity": "Uncommon",
-    "image": "texture_1.png",
-    "behavior": "normal",
-    "bubbleType": "normal",
-    "timestamp": 1767187656192
-  },
-  {
-    "owner": "c_nairs",
+    "owner": "Tumaraitiyark",
     "wish": "",
     "rarity": "Common",
     "image": "texture_0.png",
     "behavior": "normal",
-    "bubbleType": "normal",
-    "timestamp": 1767187670253
+    "bubbleType": "default",
+    "timestamp": 1767199935889
   },
   {
-    "owner": "c_nairs",
-    "wish": "",
-    "rarity": "Common",
-    "image": "texture_0.png",
-    "behavior": "normal",
-    "bubbleType": "normal",
-    "timestamp": 1767187687825
-  },
-  {
-    "owner": "c_nairs",
+    "owner": "Hibiscus548",
     "wish": "",
     "rarity": "Rare",
     "image": "texture_2.png",
     "behavior": "shy",
-    "bubbleType": "normal",
-    "timestamp": 1767187698204
+    "bubbleType": "default",
+    "timestamp": 1767199937939
   },
   {
-    "owner": "c_nairs",
+    "owner": "Chanamnom",
     "wish": "",
     "rarity": "Common",
     "image": "texture_0.png",
     "behavior": "normal",
-    "bubbleType": "normal",
-    "timestamp": 1767188458262
+    "bubbleType": "default",
+    "timestamp": 1767199939525
   },
   {
-    "owner": "c_nairs",
+    "owner": "RayzLixztz",
     "wish": "",
     "rarity": "Common",
     "image": "texture_0.png",
     "behavior": "normal",
-    "bubbleType": "normal",
-    "timestamp": 1767188481235
+    "bubbleType": "default",
+    "timestamp": 1767199948007
   },
   {
-    "owner": "c_nairs",
-    "wish": "",
-    "rarity": "Common",
-    "image": "texture_0.png",
-    "behavior": "normal",
-    "bubbleType": "normal",
-    "timestamp": 1767188490645
-  },
-  {
-    "owner": "c_nairs",
+    "owner": "PoiPoiz01",
     "wish": "",
     "rarity": "Uncommon",
     "image": "texture_1.png",
     "behavior": "normal",
-    "bubbleType": "normal",
-    "timestamp": 1767188501140
+    "bubbleType": "default",
+    "timestamp": 1767199948189
+  },
+  {
+    "owner": "RayzLixztz",
+    "wish": "",
+    "rarity": "Uncommon",
+    "image": "texture_1.png",
+    "behavior": "normal",
+    "bubbleType": "default",
+    "timestamp": 1767199957468
+  },
+  {
+    "owner": "UltimateAlpaca_",
+    "wish": "",
+    "rarity": "Common",
+    "image": "texture_0.png",
+    "behavior": "normal",
+    "bubbleType": "default",
+    "timestamp": 1767199975209
+  },
+  {
+    "owner": "UltimateAlpaca_",
+    "wish": "",
+    "rarity": "Uncommon",
+    "image": "texture_1.png",
+    "behavior": "normal",
+    "bubbleType": "default",
+    "timestamp": 1767199987387
+  },
+  {
+    "owner": "blackznowz",
+    "wish": "",
+    "rarity": "Common",
+    "image": "texture_0.png",
+    "behavior": "normal",
+    "bubbleType": "default",
+    "timestamp": 1767200092797
+  },
+  {
+    "owner": "Riikame_",
+    "wish": "",
+    "rarity": "Common",
+    "image": "texture_0.png",
+    "behavior": "normal",
+    "bubbleType": "default",
+    "timestamp": 1767200126794
+  },
+  {
+    "owner": "RayzLixztz",
+    "wish": "",
+    "rarity": "Rare",
+    "image": "texture_2.png",
+    "behavior": "shy",
+    "bubbleType": "default",
+    "timestamp": 1767200132880
+  },
+  {
+    "owner": "lazyjenga",
+    "wish": "",
+    "rarity": "Common",
+    "image": "texture_0.png",
+    "behavior": "normal",
+    "bubbleType": "default",
+    "timestamp": 1767200374751
+  },
+  {
+    "owner": "Nutty1999x20",
+    "wish": "",
+    "rarity": "Uncommon",
+    "image": "texture_1.png",
+    "behavior": "normal",
+    "bubbleType": "default",
+    "timestamp": 1767200421888
+  },
+  {
+    "owner": "PHONE__KUNG",
+    "wish": "",
+    "rarity": "Common",
+    "image": "texture_0.png",
+    "behavior": "normal",
+    "bubbleType": "default",
+    "timestamp": 1767201323819
+  },
+  {
+    "owner": "RayzLixztz",
+    "wish": "",
+    "rarity": "Epic",
+    "image": "texture_3.png",
+    "behavior": "brave",
+    "bubbleType": "default",
+    "timestamp": 1767201877358
+  },
+  {
+    "owner": "Lookplatoo",
+    "wish": "",
+    "rarity": "Common",
+    "image": "texture_0.png",
+    "behavior": "normal",
+    "bubbleType": "default",
+    "timestamp": 1767201940090
+  },
+  {
+    "owner": "c_nairs",
+    "wish": "",
+    "rarity": "Epic",
+    "image": "texture_3.png",
+    "behavior": "brave",
+    "bubbleType": "default",
+    "timestamp": 1767202617672
+  },
+  {
+    "owner": "scarecrow_vpk",
+    "wish": "",
+    "rarity": "Epic",
+    "image": "texture_3.png",
+    "behavior": "brave",
+    "bubbleType": "default",
+    "timestamp": 1767202669219
+  },
+  {
+    "owner": "Riikame_",
+    "wish": "",
+    "rarity": "Uncommon",
+    "image": "texture_1.png",
+    "behavior": "normal",
+    "bubbleType": "default",
+    "timestamp": 1767202703705
+  },
+  {
+    "owner": "RikoPrushka",
+    "wish": "",
+    "rarity": "Uncommon",
+    "image": "texture_1.png",
+    "behavior": "normal",
+    "bubbleType": "default",
+    "timestamp": 1767202712758
+  },
+  {
+    "owner": "lazyjenga",
+    "wish": "",
+    "rarity": "Uncommon",
+    "image": "texture_1.png",
+    "behavior": "normal",
+    "bubbleType": "default",
+    "timestamp": 1767203015936
+  },
+  {
+    "owner": "BL4XK",
+    "wish": "",
+    "rarity": "Rare",
+    "image": "texture_2.png",
+    "behavior": "shy",
+    "bubbleType": "default",
+    "timestamp": 1767203050148
+  },
+  {
+    "owner": "lazyjenga",
+    "wish": "",
+    "rarity": "Epic",
+    "image": "texture_3.png",
+    "behavior": "brave",
+    "bubbleType": "default",
+    "timestamp": 1767203244543
+  },
+  {
+    "owner": "Hibiscus548",
+    "wish": "",
+    "rarity": "Mythic",
+    "image": "texture_4.png",
+    "behavior": "glowing",
+    "bubbleType": "default",
+    "timestamp": 1767203282386
+  },
+  {
+    "owner": "Bora_Ice",
+    "wish": "",
+    "rarity": "Common",
+    "image": "texture_0.png",
+    "behavior": "normal",
+    "bubbleType": "default",
+    "timestamp": 1767204356155
+  },
+  {
+    "owner": "lazyjenga",
+    "wish": "",
+    "rarity": "Mythic",
+    "image": "texture_4.png",
+    "behavior": "glowing",
+    "bubbleType": "default",
+    "timestamp": 1767204450429
   }
 ]

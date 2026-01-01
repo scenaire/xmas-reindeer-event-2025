@@ -1,13 +1,25 @@
 import { dataManager } from './DataManager.js';
+import { TwitchService } from './TwitchService.js';
+import { analyzeWish } from '../../public/modules/WishAnalyzer.js';
+
+
+const RARITY_SCORE = {
+    'Common': 0,
+    'Uncommon': 1,
+    'Rare': 2,
+    'Epic': 3,
+    'Mythic': 4
+};
 
 /**
  * RewardHandler - ผู้จัดการระบบรางวัลและคำสั่งพิเศษ
  * ทำหน้าที่เปลี่ยน Event จาก Twitch ให้กลายเป็นการกระทำในเกมค่ะ
  */
 export class RewardHandler {
-    constructor(io, gachaManager) {
+    constructor(io, gachaManager, TwitchService) {
         this.io = io;
         this.gacha = gachaManager;
+        this.twitch = TwitchService;
 
         // การจับคู่ชื่อรางวัลกับฟังก์ชัน (Command Mapping)
         // ถ้าคุณ Nair เพิ่มรางวัลใน Twitch ก็แค่มาเพิ่มชื่อตรงนี้ค่ะ
@@ -21,6 +33,8 @@ export class RewardHandler {
             'zero gravity': () => this.io.emit('command', { type: 'ZERO_GRAVITY' }), // เพิ่มอันนี้ที่คุณ Nair มี
             'find my deer': (data) => this.handleFindDeer(data) // เพิ่มฟังก์ชันรองรับรางวัลใหม่
         };
+
+
     }
 
     /**
@@ -46,11 +60,52 @@ export class RewardHandler {
         const userName = data.user_name;
         const userInput = data.user_input || "";
 
-        // 1. สุ่มกาชา
+        // 1. สุ่มกาชา (ได้ผลลัพธ์ใหม่มา)
         const gachaResult = this.gacha.roll(userName);
 
-        // 2. ปลดล็อกของสะสม (Collection)
+        // 2. ดึงข้อมูล "คอลเลกชันกวางทั้งหมด" ของคนนี้ (History)
+        // ต้องเช็คก่อน Unlock ของใหม่นะคะ จะได้รู้ว่าของเก่าสูงสุดเท่าไหร่
+        const userCollection = dataManager.getCollection()[userName.toLowerCase()] || [];
+
+        // หา "คะแนนสูงสุด" ที่เคยทำได้ (Max Score from History)
+        let maxPreviousScore = 0;
+        userCollection.forEach(rarity => {
+            const score = RARITY_SCORE[rarity] || 0;
+            if (score > maxPreviousScore) {
+                maxPreviousScore = score;
+            }
+        });
+
+        // 3. คำนวณคะแนนของตัวใหม่ที่เพิ่งได้
+        const newScore = RARITY_SCORE[gachaResult.rarity] || 0;
+
+        // ดึงตัวที่ยืนอยู่ปัจจุบัน (เอาไว้เช็คเพื่อเล่น Animation)
+        const gameState = dataManager.getGameState();
+        const currentDeer = gameState[userName];
+
+        console.log(`🎲 ${userName} Rolled: ${gachaResult.rarity} (${newScore}) vs Best Ever: ${maxPreviousScore}`);
+
+        // ✅ 4. ปลดล็อกของใหม่ลง Database (Unlock)
+        // ต้องทำตรงนี้เพื่อให้แน่ใจว่าบันทึกของใหม่แล้ว ไม่ว่าผลลัพธ์จะเป็นยังไง
         dataManager.unlockRarity(userName, gachaResult.rarity);
+
+        // 5. เงื่อนไข: ถ้าคะแนนใหม่ "น้อยกว่าหรือเท่ากับ" สถิติสูงสุดเดิม (New <= Max History)
+        // และต้องมีกวางยืนอยู่บนจอด้วยนะ (currentDeer) ถึงจะสั่งกระโดดได้
+        if (currentDeer && newScore <= maxPreviousScore) {
+            console.log(`🧂 Salt! ${userName} didn't beat their record.`);
+
+            // ส่งคำสั่ง DUPLICATE -> ให้ตัวเดิมกระโดด (ไม่เปลี่ยนตัวแสดงผล)
+            this.io.emit('game_event', {
+                type: 'DUPLICATE',
+                owner: userName,
+                wish: currentDeer.wish,
+                bubbleType: currentDeer.bubbleType,
+            });
+            return;
+        }
+
+        // 6. เงื่อนไข: ทำลายสถิติใหม่! (New > Max History) หรือ เพิ่งเคยเล่นครั้งแรก
+        console.log(`✨ New Record! ${userName} upgraded their best deer.`);
 
         const payload = {
             owner: userName,
@@ -58,59 +113,78 @@ export class RewardHandler {
             rarity: gachaResult.rarity,
             image: gachaResult.image,
             behavior: gachaResult.behavior,
-            bubbleType: this.analyzeWishType(userInput),
+            bubbleType: analyzeWish(userInput), //
             timestamp: Date.now()
         };
 
-        // 3. บันทึกสถานะลงฐานข้อมูล และ Log
+        // อัปเดตให้ตัวนี้เป็นตัวแสดงผลปัจจุบัน (Active)
         dataManager.updateGameState(userName, payload);
         dataManager.logReindeerEvent(payload);
 
-        // 4. ส่งคำสั่งไปที่หน้าจอ (Frontend)
-        this.io.emit('game_event', { type: 'SPAWN', data: payload });
+        // ส่งคำสั่ง SPAWN
+        // isUpgrade: true คือบอก Frontend ว่า "ช่วยเล่นท่าวิ่งเปลี่ยนตัวหน่อย"
+        this.io.emit('game_event', {
+            type: 'SPAWN',
+            data: payload,
+            isUpgrade: !!currentDeer
+        });
     }
 
     handleFindDeer(eventData) {
         // ดึงชื่อคนแลกรางวัล (Twitch ส่งมาใน user_name)
         const ownerName = eventData.user_name;
 
+        //ไปค้นข้อมูลล่าสุดของกวางตัวนี้มาจาก Database (Memory)
+        const gameState = dataManager.getGameState();
+        const deerData = gameState[ownerName];
+
         console.log(`🔍 [Reward] Finding deer for: ${ownerName}`);
 
         // ส่งคำสั่งไปที่หน้าจอให้กวางแสดงตัว
         this.io.emit('game_event', {
             type: 'FIND_DEER',
-            owner: ownerName
+            owner: ownerName,
+            wish: deerData ? deerData.wish : null,           // ข้อความ HTML
+            bubbleType: deerData ? deerData.bubbleType : 'default' // สี Bubble
         });
     }
 
     // --- ✨ Handler สำหรับการขอพร (Wish) ---
     handleWish(data) {
         const userName = data.user_name;
-        const wishText = data.user_input;
+        const rawWish = data.user_input || ""; // ข้อความดิบที่พิมพ์มา
 
-        // ✅ 1. แก้ไขการเรียก DataManager (ลบ this. ออก และใช้ getGameState)
+        // ✅ 1. ตรวจสอบกวาง (เหมือนเดิม)
         const gameState = dataManager.getGameState();
-        const reindeerData = gameState[userName]; // ดึงข้อมูลกวางจาก State กลาง
+        const reindeerData = gameState[userName];
 
         if (!reindeerData) {
             console.log(`⚠️ [Wish] ${userName} พยายามอธิษฐานแต่ไม่มีกวางในจอค่ะ`);
-            return; // จบการทำงาน ไม่ส่ง Event ไปที่หน้าจอ
+            return;
         }
 
-        // ✅ 2. วิเคราะห์และอัปเดตข้อมูล
-        const bubbleType = this.analyzeWishType(wishText);
+        // ✅ 2. แปลงข้อความให้มีรูป Emote (ใช้ TwitchService ที่เราทำไว้)
+        // ต้องมั่นใจว่าใน constructor รับ this.twitch มาแล้วนะคะ
+        const htmlWish = this.twitch.parseCachedEmotes(rawWish);
 
-        reindeerData.wish = wishText;
+        // ✅ 3. วิเคราะห์ประเภท Bubble (ใช้ข้อความดิบวิเคราะห์)
+        const bubbleType = analyzeWish(rawWish);
+
+        console.log(`💬 [Wish] ${userName} (${bubbleType}): ${rawWish}`);
+
+        // ✅ 4. อัปเดตข้อมูล (บันทึกทั้ง html และ raw เผื่อใช้)
+        reindeerData.wish = htmlWish;
         reindeerData.bubbleType = bubbleType;
 
-        // ✅ 3. บันทึก (ลบ this. ออก และใช้ updateGameState)
         dataManager.updateGameState(userName, reindeerData);
 
-        // ส่งข้อมูลไปที่หน้าจอ
+        // ✅ 5. ส่ง Event ไปที่หน้าจอ
+        // ใช้ type: 'wish' เพื่อให้ตรงกับที่ script.js ฝั่งหน้าบ้านรอรับ (ถ้าหน้าบ้านแก้แล้ว)
         this.io.emit('game_event', {
-            type: 'UPDATE_WISH',
+            type: 'wish',
             owner: userName,
-            wish: wishText,
+            wish: htmlWish,       // ส่งข้อความที่เป็น HTML (มีรูป) ไปแสดง
+            rawWish: rawWish,     // ส่งข้อความดิบไปด้วยเผื่อใช้
             bubbleType: bubbleType
         });
     }
@@ -135,14 +209,4 @@ export class RewardHandler {
         }
     }
 
-    // --- 🧠 Helper: วิเคราะห์ข้อความเพื่อเลือกสี Bubble ---
-    analyzeWishType(text) {
-        if (!text) return 'normal';
-        const loveKeywords = ['รัก', 'love', 'heart', '<3', 'แฟน'];
-        const luckyKeywords = ['รวย', 'เงิน', 'ทอง', 'luck', 'gacha'];
-
-        if (loveKeywords.some(k => text.toLowerCase().includes(k))) return 'love';
-        if (luckyKeywords.some(k => text.toLowerCase().includes(k))) return 'lucky';
-        return 'normal';
-    }
 }

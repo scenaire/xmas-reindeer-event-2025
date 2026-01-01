@@ -17,7 +17,15 @@ export class Reindeer extends PIXI.AnimatedSprite {
         this.loop = true;
 
         // ตั้งค่าตำแหน่งและสถานะ
-        const startAtLeft = Math.random() < 0.5;
+        let startAtLeft;
+
+        if (data.forceSide === 'right') {
+            startAtLeft = false; // บังคับเกิดขวา
+        } else if (data.forceSide === 'left') {
+            startAtLeft = true;  // บังคับเกิดซ้าย
+        } else {
+            startAtLeft = Math.random() < 0.5; // สุ่มปกติ
+        }
         this.x = startAtLeft ? -100 : CONFIG.SCREEN_WIDTH + 100;
         this.y = CONFIG.GROUND_Y + (Math.random() * 30);
         this.state = 'moving';
@@ -56,6 +64,7 @@ export class Reindeer extends PIXI.AnimatedSprite {
 
     update(delta) {
         if (this.destroyed) return;
+        if (this.isRGB) { console.log("RGB Updating:", this.rgbHue); }
 
         // ✅ 2. แก้ไขการเช็คสถานะให้ตรงกับ Constants (STATES.ZERO_GRAVITY)
         if (this.state === STATES.ZERO_GRAVITY) {

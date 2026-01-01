@@ -29,9 +29,14 @@ app.use(express.static('public'));
 
 // --- 🚀 Initialize Services ---
 
-const gacha = new GachaManager();
-const rewardHandler = new RewardHandler(io, gacha);
+// 1. สร้าง TwitchService ก่อน (ต้องอยู่บรรทัดบนสุดในกลุ่มนี้)
 const twitch = new TwitchService(io);
+
+const gacha = new GachaManager();
+
+// 2. สร้าง RewardHandler โดยส่ง twitch เข้าไปเป็นตัวที่ 3
+// ✅ ต้องมีครบ 3 ตัว: (io, gacha, twitch)
+const rewardHandler = new RewardHandler(io, gacha, twitch);
 const presence = new PresenceManager(io, twitch);
 presence.start(); // เริ่ม Loop เช็คคนออนไลน์
 

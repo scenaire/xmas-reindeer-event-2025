@@ -1,11 +1,160 @@
 {
-  "c_nairs": {
-    "owner": "c_nairs",
-    "wish": "วันนี้บิดดีมั้ย ThatsAServe ",
+  "Tumaraitiyark": {
+    "owner": "Tumaraitiyark",
+    "wish": "",
+    "rarity": "Common",
+    "image": "texture_0.png",
+    "behavior": "normal",
+    "bubbleType": "default",
+    "timestamp": 1767199935889
+  },
+  "Hibiscus548": {
+    "owner": "Hibiscus548",
+    "wish": "",
+    "rarity": "Mythic",
+    "image": "texture_4.png",
+    "behavior": "glowing",
+    "bubbleType": "default",
+    "timestamp": 1767203282386
+  },
+  "Chanamnom": {
+    "owner": "Chanamnom",
+    "wish": "ขอให้คุณพิมมาสตรีมบ่อยๆ",
+    "rarity": "Common",
+    "image": "texture_0.png",
+    "behavior": "normal",
+    "bubbleType": "default",
+    "timestamp": 1767199939525
+  },
+  "RayzLixztz": {
+    "owner": "RayzLixztz",
+    "wish": "สวัสดีพี่ริโกะ",
+    "rarity": "Epic",
+    "image": "texture_3.png",
+    "behavior": "brave",
+    "bubbleType": "default",
+    "timestamp": 1767201877358
+  },
+  "PoiPoiz01": {
+    "owner": "PoiPoiz01",
+    "wish": "อยากดูเกมผีครับ",
     "rarity": "Uncommon",
     "image": "texture_1.png",
     "behavior": "normal",
-    "bubbleType": "normal",
-    "timestamp": 1767188501140
+    "bubbleType": "chaos",
+    "timestamp": 1767199948189
+  },
+  "UltimateAlpaca_": {
+    "owner": "UltimateAlpaca_",
+    "wish": "ขอให้เรื่องราวร้าย ๆ ผ่านไปไว ๆ <img src=\"https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_c48ca99e79994dadaf06c611dc244506/default/dark/3.0\" class=\"emote\"> ",
+    "rarity": "Uncommon",
+    "image": "texture_1.png",
+    "behavior": "normal",
+    "bubbleType": "default",
+    "timestamp": 1767199987387
+  },
+  "blackznowz": {
+    "owner": "blackznowz",
+    "wish": "ขอให้คุณพิมมาสตรีมบ่อยๆ",
+    "rarity": "Common",
+    "image": "texture_0.png",
+    "behavior": "normal",
+    "bubbleType": "default",
+    "timestamp": 1767200092797
+  },
+  "Riikame_": {
+    "owner": "Riikame_",
+    "wish": "",
+    "rarity": "Uncommon",
+    "image": "texture_1.png",
+    "behavior": "normal",
+    "bubbleType": "default",
+    "timestamp": 1767202703705
+  },
+  "lazyjenga": {
+    "owner": "lazyjenga",
+    "wish": "",
+    "rarity": "Mythic",
+    "image": "texture_4.png",
+    "behavior": "glowing",
+    "bubbleType": "default",
+    "timestamp": 1767204450429
+  },
+  "Nutty1999x20": {
+    "owner": "Nutty1999x20",
+    "wish": "ขอให้น้องแนร์ได้มาสตรีมบ่อยๆ",
+    "rarity": "Uncommon",
+    "image": "texture_1.png",
+    "behavior": "normal",
+    "bubbleType": "default",
+    "timestamp": 1767200421888
+  },
+  "PHONE__KUNG": {
+    "owner": "PHONE__KUNG",
+    "wish": "",
+    "rarity": "Common",
+    "image": "texture_0.png",
+    "behavior": "normal",
+    "bubbleType": "default",
+    "timestamp": 1767201323819
+  },
+  "Lookplatoo": {
+    "owner": "Lookplatoo",
+    "wish": "",
+    "rarity": "Common",
+    "image": "texture_0.png",
+    "behavior": "normal",
+    "bubbleType": "default",
+    "timestamp": 1767201940090
+  },
+  "c_nairs": {
+    "owner": "c_nairs",
+    "wish": "",
+    "rarity": "Epic",
+    "image": "texture_3.png",
+    "behavior": "brave",
+    "bubbleType": "default",
+    "timestamp": 1767202617672
+  },
+  "scarecrow_vpk": {
+    "owner": "scarecrow_vpk",
+    "wish": "",
+    "rarity": "Epic",
+    "image": "texture_3.png",
+    "behavior": "brave",
+    "bubbleType": "default",
+    "timestamp": 1767202669219
+  },
+  "RikoPrushka": {
+    "owner": "RikoPrushka",
+    "wish": "",
+    "rarity": "Uncommon",
+    "image": "texture_1.png",
+    "behavior": "normal",
+    "bubbleType": "default",
+    "timestamp": 1767202712758
+  },
+  "BL4XK": {
+    "owner": "BL4XK",
+    "wish": "",
+    "rarity": "Rare",
+    "image": "texture_2.png",
+    "behavior": "shy",
+    "bubbleType": "default",
+    "timestamp": 1767203050148
+  },
+  "Bora_Ice": {
+    "owner": "Bora_Ice",
+    "wish": "",
+    "rarity": "Common",
+    "image": "texture_0.png",
+    "behavior": "normal",
+    "bubbleType": "default",
+    "timestamp": 1767204356155
+  },
+  "nair_test": {
+    "owner": "nair_test",
+    "rarity": "Mythic",
+    "wish": "ขอให้โปรเจกต์ผ่านฉลุย!"
   }
 }

@@ -128,6 +128,18 @@ html {
     /* ให้อยู่บนทับเส้นขอบล่าง */
 }
 
+.wish-bubble img.emote {
+    height: 0.8em;
+    /* สูงเท่ากับ 1.5 เท่าของตัวหนังสือ (ปรับเลขนี้ได้) */
+    width: auto;
+    /* ให้กว้างตามสัดส่วน */
+    vertical-align: middle;
+    /* จัดให้วางแนวเดียวกับกึ่งกลางตัวหนังสือ */
+    margin: 0 2px;
+    /* เว้นระยะห่างซ้ายขวานิดหน่อยจะได้ไม่เบียด */
+    display: inline-block;
+}
+
 @keyframes popIn {
     0% {
         transform: translate(-50%, -100%) scale(0);
