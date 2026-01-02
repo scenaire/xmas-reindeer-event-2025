@@ -12,14 +12,11 @@ export class TwitchService {
         this.credentials = {
             clientId: process.env.TWITCH_CLIENT_ID,
             userToken: process.env.TWITCH_USER_ACCESS_TOKEN,
-            channelName: process.env.CHANNEL_NAME,
+            channelName: process.env.TWITCH_CHANNEL_NAME,
             signingSecret: process.env.TWITCH_SIGNING_SECRET
         };
 
         this.emoteMap = new Map(); // เก็บ Cache Emote สำหรับ Redeem
-
-        // เริ่มทำงาน
-        this.initChatBot();
         this.loadAllEmotes(); // โหลด Emote รอไว้ให้ RewardHandler ใช้
     }
 
@@ -98,23 +95,6 @@ export class TwitchService {
             }
             return word;
         }).join('');
-    }
-
-    // --- 💬 TMI.js: ระบบ Chat Bot สำหรับคำสั่งลับของคุณ Nair ---
-    initChatBot() {
-        this.chatClient = new tmi.Client({ channels: [this.credentials.channelName] });
-        this.chatClient.connect().catch(console.error);
-
-        this.chatClient.on('message', (channel, tags, message, self) => {
-            if (self) return;
-
-            // ยังคงส่ง Chat Message ทั่วไปเผื่อเอาไปใช้แสดง Chat Box (ถ้าไม่ใช้ก็ลบได้)
-            this.io.emit('chat_message', {
-                username: tags['display-name'],
-                message: message,
-                color: tags['color']
-            });
-        });
     }
 
     async getOnlineViewers() {

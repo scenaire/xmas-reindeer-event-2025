@@ -1,7 +1,6 @@
 import { CONFIG, STATES } from './modules/Constants.js';
 import { AssetManager } from './modules/AssetManager.js';
 import { Reindeer } from './modules/Reindeer.js';
-import { analyzeWish } from './modules/WishAnalyzer.js';
 
 // ลดการสั่นสะเทือนของ PIXI
 PIXI.settings.SCALE_MODE = PIXI.SCALE_MODES.NEAREST;
@@ -78,9 +77,7 @@ class ReindeerApp {
                         dupDeer.jump();
                         dupDeer.showNametag();
 
-                        if (event.wish) {
-                            dupDeer.addWish(event.wish, event.bubbleType);
-                        }
+                        dupDeer.sayTemporary("กวางเกลือเค็มปี๋!", 'cloud', 2500);
                     }
                     break;
                 case 'SPAWN':
@@ -110,7 +107,6 @@ class ReindeerApp {
                     break;
                 case 'FIND_DEER':
                     const wishToShow = event.wish;
-                    const typeToShow = event.bubbleType;
 
                     // หาตัวกวาง (แก้ this.reindeerMap ให้ตรงกับตัวแปรของคุณ)
                     const foundDeer = this.reindeerMap.get(owner);
@@ -122,7 +118,7 @@ class ReindeerApp {
 
                         // ✅ 2. เพิ่มเงื่อนไข: ถ้ามีคำขอพรส่งมาด้วย ให้โชว์ Bubble เลย!
                         if (wishToShow) {
-                            foundDeer.addWish(wishToShow, typeToShow);
+                            foundDeer.restoreWish();
                         }
                     }
                     break;
@@ -139,6 +135,79 @@ class ReindeerApp {
                     this.removeReindeer(owner);
                     this.spawnReindeer(data);
                     break;
+                case 'SWITCH_DEER':
+                    const deerToSwitch = this.reindeerMap.get(owner);
+
+                    // ❌ กรณีเปลี่ยนไม่ได้ (ไม่มีของ): กระโดด + บ่น
+                    if (!event.success) {
+                        if (deerToSwitch) {
+                            deerToSwitch.jump();
+                            deerToSwitch.showNametag();
+                            deerToSwitch.sayTemporary(`ยังไม่มีน้อง ${event.targetRarity} เลย...`, 'cloud', 3000); // ใช้ Bubble สีเทาๆ หรือแบบคิด
+                        }
+                        return;
+                    }
+
+                    // ✅ กรณีเปลี่ยนได้ (มีของ): วิ่งเปลี่ยนตัว
+                    if (deerToSwitch) {
+                        const exitDir = event.exitDirection; // 'left' หรือ 'right'
+
+                        // 1. สั่งตัวเก่าวิ่งออกไปจนลับจอ
+                        deerToSwitch.runAway(exitDir);
+
+                        // 2. รอ 2 วินาที (ให้ตัวเก่าวิ่งพ้นจอไปก่อน)
+                        setTimeout(() => {
+                            // ลบตัวเก่าทิ้ง
+                            this.removeReindeer(owner);
+
+                            // เตรียมข้อมูลตัวใหม่
+                            // บังคับให้เกิดจากทิศเดียวกับที่วิ่งออกไป (forceSide)
+                            // ถ้าวิ่งออกขวา -> ก็ต้องเดินเข้าจากขวา
+                            const newData = event.data;
+                            newData.forceSide = exitDir;
+
+                            // สร้างตัวใหม่
+                            this.spawnReindeer(newData);
+
+                            // 3. หลังจากสร้างเสร็จ ให้ตัวใหม่โชว์ชื่อ + Bubble ทันที
+                            // ต้องรอแป๊บนึงให้ Object สร้างเสร็จ (Next Tick)
+                            setTimeout(() => {
+                                const newDeer = this.reindeerMap.get(owner);
+                                if (newDeer) {
+                                    newDeer.showNametag();
+                                    if (newData.wish) {
+                                        newDeer.restoreWish();
+                                    }
+                                }
+                            }, 100);
+
+                        }, 2000); // เวลาต้องสัมพันธ์กับความเร็ววิ่ง
+                    } else {
+                        // ถ้าไม่มีตัวอยู่บนจอเลย แต่อยากเปลี่ยน -> ก็เสกมาเลย
+                        this.spawnReindeer(event.data);
+                    }
+                    break;
+                case 'USER_OFFLINE':
+                    const leavingDeer = this.reindeerMap.get(owner);
+                    if (leavingDeer) {
+                        leavingDeer.jump();
+                        leavingDeer.showNametag();
+
+                        const byeWords = ["ไปก่อนนะ...", "ง่วงแล้ว...", "บายจ้า!", "ZZZzz.."];
+                        const word = byeWords[Math.floor(Math.random() * byeWords.length)];
+                        leavingDeer.sayTemporary(word, 'cloud', 2000);
+
+                        setTimeout(() => {
+                            if (leavingDeer && !leavingDeer.destroyed) {
+                                leavingDeer.runAway(event.exitDirection || 'left');
+
+                                setTimeout(() => {
+                                    this.removeReindeer(owner);
+                                }, 2000);
+                            }
+                        }, 2500);
+                    }
+
                 case 'DISMISS':
                     if (this.reindeerMap.has(owner)) {
                         // ทำให้น้องกวางวิ่งหนีออกไปเอง (ดูเป็นธรรมชาติกว่าหายวับไปค่ะ)
@@ -146,6 +215,7 @@ class ReindeerApp {
                         reindeer.state = STATES.RUNNING;
                     }
                     break;
+
             }
         });
 

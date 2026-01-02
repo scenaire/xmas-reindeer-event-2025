@@ -109,7 +109,7 @@
   },
   "c_nairs": {
     "owner": "c_nairs",
-    "wish": "",
+    "wish": "ทดสอบ",
     "rarity": "Epic",
     "image": "texture_3.png",
     "behavior": "brave",
@@ -151,10 +151,5 @@
     "behavior": "normal",
     "bubbleType": "default",
     "timestamp": 1767204356155
-  },
-  "nair_test": {
-    "owner": "nair_test",
-    "rarity": "Mythic",
-    "wish": "ขอให้โปรเจกต์ผ่านฉลุย!"
   }
 }

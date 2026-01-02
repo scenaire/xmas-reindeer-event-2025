@@ -32,6 +32,7 @@ export const CONFIG = {
 
     // --- ⏳ Timings (Milliseconds) ---
     WISH_DURATION: 15000,    // ข้อความขอพรค้างไว้ 15 วินาที
+    TEMPORARY_MESSAGE_DURATION: 5000, // ข้อความชั่วคราวค้างไว้ 5 วินาที
     DESPAWN_TIME: 3600000,   // กวางจะหายไปหลังจาก 1 ชั่วโมง (ถ้าอยากให้ค้างไว้นานๆ)
 
     // --- 🎨 Animation Settings ---
@@ -77,6 +78,13 @@ export const CONFIG = {
             box: 'bubble_box.png',
             tail: 'bubble_tail.png',
             backgroundColor: '#ffffff',
+        },
+        cloud: {
+            class: 'bubble-cloud',
+            fontColor: '#51779eff',
+            box: 'bubble_box_cloud.png',
+            tail: 'bubble_tail_cloud.png',
+            backgroundColor: '#e5f2ff',
         },
         chaos: {
             class: 'bubble-chaos',

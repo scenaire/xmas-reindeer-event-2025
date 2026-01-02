@@ -280,13 +280,17 @@ export class Reindeer extends PIXI.AnimatedSprite {
         }
     }
 
-    addWish(text, type = 'default') {
-        // 1. ล้างของเก่าทิ้งทันที (แบบไม่รีรอ) เพื่อกันบับเบิ้ลซ้อน/ค้าง
-        this.removeBubble(true); // true = ลบทันทีไม่ต้องรอ Fade
+    /**
+     * 1. ฟังก์ชันแสดงผล (Core Render)
+     * ทำหน้าที่แค่สร้าง DOM และแปะลงหน้าจอ ไม่บันทึกค่าใดๆ
+     */
+    displayBubble(text, type = 'default') {
+        // ลบอันเก่าก่อนเสมอ
+        this.removeBubble(true);
 
         const config = CONFIG.BUBBLE_TYPES[type] || CONFIG.BUBBLE_TYPES.default;
 
-        // 2. สร้าง Element ใหม่
+        // สร้าง Element
         this.bubbleElement = document.createElement('div');
         this.bubbleElement.className = `wish-bubble ${config.class || ''}`;
 
@@ -298,18 +302,72 @@ export class Reindeer extends PIXI.AnimatedSprite {
         this.bubbleElement.style.setProperty('--font-color', config.fontColor);
         this.bubbleElement.style.setProperty('--bg-color', config.backgroundColor || '#ffffff');
 
-        // ใส่เนื้อหา
         this.bubbleElement.innerHTML = `<div class="bubble-content">${text}</div>`;
 
-        document.getElementById('bubble-container').appendChild(this.bubbleElement);
+        const container = document.getElementById('bubble-container');
+        if (container) container.appendChild(this.bubbleElement);
 
-        // 3. จัดตำแหน่งทันที 1 ครั้ง (กันแว๊บผิดที่)
+        // จัดตำแหน่ง
         this.syncBubblePosition();
+    }
 
-        // 4. ตั้งเวลาลบ (และเก็บ ID ไว้เพื่อยกเลิกถ้ามีอันใหม่มาแทรก)
+    /**
+     * 2. ฟังก์ชันเพิ่มพร (Save & Show)
+     * ใช้สำหรับคำสั่ง !wish หรือ Redeem ที่ต้องการบันทึกถาวร
+     */
+    addWish(text, type = 'default') {
+        // ✅ บันทึกข้อมูลลง Memory
+        this.wish = text;
+        this.bubbleType = type;
+
+        // ✅ สั่งแสดงผล
+        this.displayBubble(text, type);
+
+        // ตั้งเวลาลบตามปกติ (เช่น 15 วิ)
+        if (this.bubbleTimer) clearTimeout(this.bubbleTimer);
         this.bubbleTimer = setTimeout(() => {
-            this.removeBubble(false); // false = ให้ Fade out สวยๆ เมื่อหมดเวลา
+            this.removeBubble(false); // Fade out
         }, CONFIG.WISH_DURATION || 15000);
+    }
+
+    /**
+     * 3. ฟังก์ชันพูดชั่วคราว (System Message)
+     * ใช้สำหรับบ่น, บอกลา, หรือแจ้งเตือน (ไม่ทับ Wish เดิม)
+     */
+    sayTemporary(text, type = 'cloud', duration = CONFIG.TEMPORARY_MESSAGE_DURATION || 3000) {
+        // ยกเลิก Timer การลบของ addWish ก่อน (เดี๋ยวหายกลางคัน)
+        if (this.bubbleTimer) clearTimeout(this.bubbleTimer);
+
+        // ✅ แสดงข้อความชั่วคราวเลย (ไม่ต้องบันทึก)
+        this.displayBubble(text, type);
+
+        // ตั้งเวลาคืนค่าเดิม
+        if (this.tempTimer) clearTimeout(this.tempTimer);
+        this.tempTimer = setTimeout(() => {
+            if (!this.destroyed) {
+                this.removeBubble(false);
+            }
+        }, duration);
+    }
+
+    /**
+     * 4. ฟังก์ชันกู้คืนพร (Restore)
+     * ใช้ดึงพรล่าสุดกลับมาแสดง (ใช้กับ Find My Deer ได้ด้วย!)
+     */
+    restoreWish() {
+        if (this.wish) {
+            // ถ้ามีพรอยู่ ให้แสดงพรเดิม
+            this.displayBubble(this.wish, this.bubbleType);
+
+            // ตั้งเวลาลบใหม่อีกรอบ (เริ่มนับ 15 วิใหม่)
+            if (this.bubbleTimer) clearTimeout(this.bubbleTimer);
+            this.bubbleTimer = setTimeout(() => {
+                this.removeBubble(false);
+            }, CONFIG.WISH_DURATION || 15000);
+        } else {
+            // ถ้าไม่มีพร ก็ลบออกไปเลย
+            this.removeBubble(false);
+        }
     }
 
     syncBubblePosition() {

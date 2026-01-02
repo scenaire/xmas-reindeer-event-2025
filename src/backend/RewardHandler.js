@@ -2,7 +2,6 @@ import { dataManager } from './DataManager.js';
 import { TwitchService } from './TwitchService.js';
 import { analyzeWish } from '../../public/modules/WishAnalyzer.js';
 
-
 const RARITY_SCORE = {
     'Common': 0,
     'Uncommon': 1,
@@ -16,10 +15,11 @@ const RARITY_SCORE = {
  * ทำหน้าที่เปลี่ยน Event จาก Twitch ให้กลายเป็นการกระทำในเกมค่ะ
  */
 export class RewardHandler {
-    constructor(io, gachaManager, TwitchService) {
+    constructor(io, gachaManager, TwitchService, presenceManager) {
         this.io = io;
         this.gacha = gachaManager;
         this.twitch = TwitchService;
+        this.presence = presenceManager;
 
         // การจับคู่ชื่อรางวัลกับฟังก์ชัน (Command Mapping)
         // ถ้าคุณ Nair เพิ่มรางวัลใน Twitch ก็แค่มาเพิ่มชื่อตรงนี้ค่ะ
@@ -31,7 +31,10 @@ export class RewardHandler {
             'run right': () => this.io.emit('command', { type: 'RUN_RIGHT' }), // เพิ่มอันนี้ที่คุณ Nair มี
             'jump all': () => this.io.emit('command', { type: 'JUMP_ALL' }),
             'zero gravity': () => this.io.emit('command', { type: 'ZERO_GRAVITY' }), // เพิ่มอันนี้ที่คุณ Nair มี
-            'find my deer': (data) => this.handleFindDeer(data) // เพิ่มฟังก์ชันรองรับรางวัลใหม่
+            'find my deer': (data) => this.handleFindDeer(data), // เพิ่มฟังก์ชันรองรับรางวัลใหม่
+
+            // Chat Command
+            '!reindeer change': (data) => this.handleChange(data)
         };
 
 
@@ -58,8 +61,13 @@ export class RewardHandler {
     // --- 🦌 Handler สำหรับการเกิดของกวาง (Spawn) ---
     handleSpawn(data) {
         const userName = data.user_name;
-        const userInput = data.user_input || "";
 
+        //INSTANT ONLINE : แจ้ง Presence ว่าคนนี้ Active!
+        //ถ้ากวางยังไม่เกิด มันจะเกิดทันทีโดยไม่ต้องรอรอบเช็ค 20 วิ
+
+        if (this.presence) this.presence.markActivity(userName);
+
+        const userInput = data.user_input || "";
         // 1. สุ่มกาชา (ได้ผลลัพธ์ใหม่มา)
         const gachaResult = this.gacha.roll(userName);
 
@@ -134,6 +142,8 @@ export class RewardHandler {
         // ดึงชื่อคนแลกรางวัล (Twitch ส่งมาใน user_name)
         const ownerName = eventData.user_name;
 
+        if (this.presence) this.presence.markActivity(ownerName);
+
         //ไปค้นข้อมูลล่าสุดของกวางตัวนี้มาจาก Database (Memory)
         const gameState = dataManager.getGameState();
         const deerData = gameState[ownerName];
@@ -152,8 +162,10 @@ export class RewardHandler {
     // --- ✨ Handler สำหรับการขอพร (Wish) ---
     handleWish(data) {
         const userName = data.user_name;
-        const rawWish = data.user_input || ""; // ข้อความดิบที่พิมพ์มา
+        if (this.presence) this.presence.markActivity(userName);
 
+
+        const rawWish = data.user_input || ""; // ข้อความดิบที่พิมพ์มา
         // ✅ 1. ตรวจสอบกวาง (เหมือนเดิม)
         const gameState = dataManager.getGameState();
         const reindeerData = gameState[userName];
@@ -206,6 +218,90 @@ export class RewardHandler {
                 dataManager.updateGameState(userName, gameState[userName]);
                 this.io.emit('game_event', { type: 'UPDATE_SKIN', owner: userName, data: gameState[userName] });
             }
+        }
+    }
+
+    handleChange(data) {
+        const userName = data.user_name;
+
+        if (this.presence) this.presence.markActivity(userName);
+
+        const input = (data.user_input || data.message || "").trim().toLowerCase();
+
+        // 1. เช็คว่าเป็นคำสั่งที่ถูกต้องไหม
+        if (!input.includes('change')) return;
+
+        // 2. ✂️ ตัดคำสั่ง "!reindeer change" ออกให้หมดจด! (แก้ตรงนี้)
+        // จะเหลือแค่ "common", "mythic" หรือ "rare"
+        const targetRarityRaw = input.replace('!reindeer change', '').replace('change', '').trim();
+
+        if (!targetRarityRaw) return; // ถ้าพิมพ์มาแค่ !reindeer change เฉยๆ ก็จบ
+
+        // 3. แปลงตัวแรกเป็นพิมพ์ใหญ่ (Common)
+        const targetRarity = targetRarityRaw.charAt(0).toUpperCase() + targetRarityRaw.slice(1);
+        console.log(`🔍 [Debug] User asked for: "${targetRarity}"`); // เพิ่ม Log ให้เห็นชัดๆ
+
+        // Map ชื่อ Rarity ให้ตรงกับไฟล์ภาพ (Hardcode ง่ายๆ ไปก่อนนะคะ)
+        const RARITY_MAP = {
+            'Common': { img: 'texture_0.png', behavior: 'normal' },
+            'Uncommon': { img: 'texture_1.png', behavior: 'normal' },
+            'Rare': { img: 'texture_2.png', behavior: 'shy' },
+            'Epic': { img: 'texture_3.png', behavior: 'brave' },
+            'Mythic': { img: 'texture_4.png', behavior: 'glowing' }
+        };
+
+        // ถ้าพิมพ์ชื่อมั่วมา หรือหาไม่เจอใน Map -> จบข่าว
+        if (!RARITY_MAP[targetRarity]) {
+            console.log(`⚠️ [Debug] Rarity not found: ${targetRarity}`);
+            return;
+        }
+
+        // 4. ตรวจสอบว่ามีกวางตัวนี้ใน Collection หรือไม่?
+        const collection = dataManager.getCollection()[userName.toLowerCase()] || [];
+        const hasRarity = collection.includes(targetRarity);
+
+        // ดึงข้อมูลปัจจุบันเพื่อเอา Wish เดิมมาใช้
+        const gameState = dataManager.getGameState();
+        const currentDeer = gameState[userName];
+        const currentWish = currentDeer ? currentDeer.wish : "กลับมาแล้ว!";
+        const currentBubble = currentDeer ? currentDeer.bubbleType : "default";
+
+        if (hasRarity) {
+            console.log(`🔄 [Switch] ${userName} switching to ${targetRarity}`);
+
+            // สร้าง Payload ใหม่
+            const payload = {
+                owner: userName,
+                wish: currentWish,
+                rarity: targetRarity,
+                image: RARITY_MAP[targetRarity].img,
+                behavior: RARITY_MAP[targetRarity].behavior,
+                bubbleType: currentBubble,
+                timestamp: Date.now()
+            };
+
+            // บันทึกและส่งข้อมูล
+            dataManager.updateGameState(userName, payload);
+
+            this.io.emit('game_event', {
+                type: 'SWITCH_DEER',
+                success: true,
+                owner: userName,
+                data: payload,
+                // สุ่มทิศทางที่จะให้วิ่งออก (ซ้ายหรือขวา)
+                exitDirection: Math.random() < 0.5 ? 'left' : 'right'
+            });
+
+        } else {
+            console.log(`❌ [Switch] ${userName} doesn't own ${targetRarity}`);
+
+            // กรณีไม่มีของ: ส่งคำสั่งไปบอกให้กระโดดเตือน
+            this.io.emit('game_event', {
+                type: 'SWITCH_DEER',
+                success: false,
+                owner: userName,
+                targetRarity: targetRarity
+            });
         }
     }
 

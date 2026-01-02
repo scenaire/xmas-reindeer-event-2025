@@ -1,14 +1,16 @@
+import 'dotenv/config';
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import bodyParser from 'body-parser';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import 'dotenv/config';
+import tmi from 'tmi.js';
+
 
 // นำเข้า Modules ที่เราสร้างไว้ค่ะ
 import { dataManager } from './src/backend/DataManager.js';
-import { GachaManager } from './src/backend/gachaManager.js';
+import { GachaManager } from './src/backend/GachaManager.js';
 import { TwitchService } from './src/backend/TwitchService.js';
 import { RewardHandler } from './src/backend/RewardHandler.js';
 import { PresenceManager } from './src/backend/PresenceManager.js';
@@ -31,14 +33,44 @@ app.use(express.static('public'));
 
 // 1. สร้าง TwitchService ก่อน (ต้องอยู่บรรทัดบนสุดในกลุ่มนี้)
 const twitch = new TwitchService(io);
-
 const gacha = new GachaManager();
+
 
 // 2. สร้าง RewardHandler โดยส่ง twitch เข้าไปเป็นตัวที่ 3
 // ✅ ต้องมีครบ 3 ตัว: (io, gacha, twitch)
-const rewardHandler = new RewardHandler(io, gacha, twitch);
 const presence = new PresenceManager(io, twitch);
+const rewardHandler = new RewardHandler(io, gacha, twitch, presence);
+
 presence.start(); // เริ่ม Loop เช็คคนออนไลน์
+
+// --- 💬 TMI.js Setup (Chat Listener) ---
+const chatClient = new tmi.Client({
+    connection: {
+        secure: true,
+        reconnect: true
+    },
+    // ✅ แก้ให้ตรงกับ .env (TWITCH_CHANNEL_NAME)
+    channels: [process.env.TWITCH_CHANNEL_NAME]
+});
+
+chatClient.connect().catch(console.error);
+
+chatClient.on('message', (channel, tags, message, self) => {
+
+    const msg = message.toLowerCase();
+
+    // เช็คว่าขึ้นต้นด้วย !reindeer change หรือไม่
+    if (msg.startsWith('!reindeer change')) {
+        console.log(`💬 [Chat Command] ${tags['display-name']} used: ${message}`);
+
+        // ส่งเข้า RewardHandler ไปจัดการต่อเลย (Logic ตัดคำอยู่ในนั้นแล้ว)
+        rewardHandler.handleChange({
+            user_name: tags['display-name'], // ชื่อคนพิมพ์
+            user_input: message,             // ข้อความเต็มๆ
+            message: message
+        });
+    }
+});
 
 // --- 🌐 API Routes ---
 
@@ -87,8 +119,7 @@ app.get('/api/online-viewers', async (req, res) => {
 io.on('connection', (socket) => {
     console.log(`🔌 [Socket] New client connected: ${socket.id}`);
 
-    // ส่งข้อมูลกวางที่มีอยู่เดิมไปให้ Client ที่เพิ่งเปิดหน้าจอ
-    socket.emit('init_state', dataManager.getGameState());
+    presence.handleInitialSync(socket);
 
     socket.on('disconnect', () => {
         console.log(`🔌 [Socket] Client disconnected`);
