@@ -7,7 +7,6 @@ PIXI.settings.SCALE_MODE = PIXI.SCALE_MODES.NEAREST;
 
 /**
  * Main Application - หัวใจของระบบหน้าจอ
- * ประสานงานทุกอย่างให้ทำงานร่วมกันอย่างราบรื่นค่ะ
  */
 class ReindeerApp {
     constructor() {
@@ -15,7 +14,7 @@ class ReindeerApp {
         this.assets = new AssetManager();
         this.reindeerMap = new Map();
         this.socket = null;
-        this.isReady = false; // ✅ เพิ่มตัวแปรเช็คความพร้อม
+        this.isReady = false;
         this.init();
     }
 
@@ -26,32 +25,33 @@ class ReindeerApp {
         this.app = new PIXI.Application({
             width: CONFIG.SCREEN_WIDTH,
             height: CONFIG.SCREEN_HEIGHT,
-            backgroundAlpha: 0, // ทำพื้นหลังโปร่งใสสำหรับสตรีม
+            backgroundAlpha: 0,
             antialias: true
         });
         document.body.appendChild(this.app.view);
 
-        // ✅ แยกเลเยอร์ให้ชัดเจน
-        this.reindeerLayer = new PIXI.Container(); // เลเยอร์กวาง (จัดเรียง Y)
-        this.uiLayer = new PIXI.Container();       // เลเยอร์ชื่อ (อยู่บนสุดเสมอ)
+        // ✅ แยกเลเยอร์
+        this.reindeerLayer = new PIXI.Container();
+        this.uiLayer = new PIXI.Container();
 
         this.app.stage.addChild(this.reindeerLayer);
         this.app.stage.addChild(this.uiLayer);
 
-        // 2. เชื่อมต่อ Socket.io
-        this.initSocket();
-
-        // 3. โหลด Assets ทั้งหมด
-        await document.fonts.ready; // รอให้ Daydream พร้อม
+        // ✅ Step สำคัญ: รอให้ฟอนต์และรูปโหลดเสร็จก่อน 100%!
+        await document.fonts.ready;
         await this.assets.init();
-        this.isReady = true;
+
+        console.log("✅ [System] Assets Loaded!");
+        this.isReady = true; // พร้อมแล้วจ้า
+
+        // ✅ ย้ายมาไว้ตรงนี้: เชื่อมต่อ Socket หลังจากของพร้อมแล้วเท่านั้น
+        // (แก้ปัญหากวางหายเพราะไม่มีรูป)
+        this.initSocket();
 
         // 4. เริ่ม Game Loop
         this.app.ticker.add((delta) => {
             this.update(delta)
         });
-
-        console.log("✨ [System] ทุกอย่างพร้อมแล้ว! ขอให้เป็นสตรีมที่ยอดเยี่ยมนะคะ");
     }
 
     initSocket() {
@@ -59,41 +59,35 @@ class ReindeerApp {
 
         // รับสถานะเริ่มต้นเมื่อเปิดหน้าจอ
         this.socket.on('init_state', (state) => {
+            console.log("📥 [Socket] Received Init State:", Object.keys(state).length, "deers");
             Object.values(state).forEach(data => this.spawnReindeer(data));
         });
 
         // รับ Event การกระทำต่างๆ
         this.socket.on('game_event', (event) => {
-
-            if (!this.isReady) return; // ✅ เช็คสถานะพร้อมก่อน
+            if (!this.isReady) return;
 
             const { type, data, owner, wish, bubbleType } = event;
+            // ✅ แปลงชื่อเป็นตัวเล็กทันทีที่รับ Event เพื่อให้หาเจอแน่นอน
+            const ownerKey = owner ? owner.toLowerCase() : null;
 
             switch (type) {
                 case 'DUPLICATE':
-                    // กรณีได้ตัวซ้ำ/เกลือ -> ให้ตัวเดิมกระโดด 1 ที
-                    const dupDeer = this.reindeerMap.get(owner);
+                    const dupDeer = this.reindeerMap.get(ownerKey);
                     if (dupDeer) {
                         dupDeer.jump();
                         dupDeer.showNametag();
-
-                        dupDeer.sayTemporary("กวางเกลือเค็มปี๋!", 'cloud', 2500);
+                        dupDeer.sayTemporary("กวางเกลือเค็มปี๋!", 'cloud');
                     }
                     break;
+
                 case 'SPAWN':
-                    // เช็คว่าเป็น Upgrade ไหม?
                     if (event.isUpgrade) {
-                        const oldDeer = this.reindeerMap.get(owner);
+                        const oldDeer = this.reindeerMap.get(ownerKey);
                         if (oldDeer) {
-                            // 1. สั่งตัวเก่าวิ่งหนีไปทางขวา (Leaving)
                             oldDeer.runAway('right');
-
-                            // 2. รอ 2 วินาที (ให้วิ่งพ้นจอ) แล้วค่อยลบ + สร้างตัวใหม่
                             setTimeout(() => {
-                                this.removeReindeer(owner);
-
-                                // 3. สร้างตัวใหม่ โดยบังคับให้เข้าจากทางขวา (forceSide: 'right')
-                                // เราต้องแก้ spawnReindeer ให้รับ parameter เพิ่ม หรือยัดลง data
+                                this.removeReindeer(ownerKey);
                                 data.forceSide = 'right';
                                 this.spawnReindeer(data);
                             }, 2000);
@@ -101,121 +95,106 @@ class ReindeerApp {
                             this.spawnReindeer(data);
                         }
                     } else {
-                        // ถ้าเพิ่งเกิดครั้งแรก ก็เกิดปกติ
                         this.spawnReindeer(data);
                     }
                     break;
+
                 case 'FIND_DEER':
-                    const wishToShow = event.wish;
-
-                    // หาตัวกวาง (แก้ this.reindeerMap ให้ตรงกับตัวแปรของคุณ)
-                    const foundDeer = this.reindeerMap.get(owner);
-
+                    const foundDeer = this.reindeerMap.get(ownerKey);
                     if (foundDeer) {
-                        // ท่าทางพื้นฐาน
                         foundDeer.jump();
                         foundDeer.showNametag();
-
-                        // ✅ 2. เพิ่มเงื่อนไข: ถ้ามีคำขอพรส่งมาด้วย ให้โชว์ Bubble เลย!
-                        if (wishToShow) {
+                        if (event.wish) {
                             foundDeer.restoreWish();
                         }
                     }
                     break;
+
                 case 'wish':
-                    if (this.reindeerMap.has(owner)) {
-                        // ส่ง HTML (wish) และประเภท (bubbleType) เข้าไปตรงๆ
-                        this.reindeerMap.get(owner).addWish(wish, bubbleType);
-                    } else {
-                        console.warn(`⚠️ ไม่พบตัวน้องกวางของ ${owner} ไม่สามารถเพิ่มคำอวยพรได้`);
+                    if (this.reindeerMap.has(ownerKey)) {
+                        this.reindeerMap.get(ownerKey).addWish(wish, bubbleType);
                     }
                     break;
+
                 case 'UPDATE_SKIN':
-                    // ลบตัวเก่าสร้างตัวใหม่เพื่อเปลี่ยนชุด (วิธีที่เสถียรที่สุดค่ะ)
-                    this.removeReindeer(owner);
+                    this.removeReindeer(ownerKey);
                     this.spawnReindeer(data);
                     break;
-                case 'SWITCH_DEER':
-                    const deerToSwitch = this.reindeerMap.get(owner);
 
-                    // ❌ กรณีเปลี่ยนไม่ได้ (ไม่มีของ): กระโดด + บ่น
+                case 'SWITCH_DEER':
+                    const deerToSwitch = this.reindeerMap.get(ownerKey);
                     if (!event.success) {
                         if (deerToSwitch) {
                             deerToSwitch.jump();
                             deerToSwitch.showNametag();
-                            deerToSwitch.sayTemporary(`ยังไม่มีน้อง ${event.targetRarity} เลย...`, 'cloud', 3000); // ใช้ Bubble สีเทาๆ หรือแบบคิด
+                            deerToSwitch.sayTemporary(`ยังไม่มีน้อง ${event.targetRarity} เลย...`, 'cloud');
                         }
                         return;
                     }
 
-                    // ✅ กรณีเปลี่ยนได้ (มีของ): วิ่งเปลี่ยนตัว
                     if (deerToSwitch) {
-                        const exitDir = event.exitDirection; // 'left' หรือ 'right'
-
-                        // 1. สั่งตัวเก่าวิ่งออกไปจนลับจอ
+                        const exitDir = event.exitDirection;
                         deerToSwitch.runAway(exitDir);
-
-                        // 2. รอ 2 วินาที (ให้ตัวเก่าวิ่งพ้นจอไปก่อน)
                         setTimeout(() => {
-                            // ลบตัวเก่าทิ้ง
-                            this.removeReindeer(owner);
-
-                            // เตรียมข้อมูลตัวใหม่
-                            // บังคับให้เกิดจากทิศเดียวกับที่วิ่งออกไป (forceSide)
-                            // ถ้าวิ่งออกขวา -> ก็ต้องเดินเข้าจากขวา
+                            this.removeReindeer(ownerKey);
                             const newData = event.data;
                             newData.forceSide = exitDir;
-
-                            // สร้างตัวใหม่
                             this.spawnReindeer(newData);
 
-                            // 3. หลังจากสร้างเสร็จ ให้ตัวใหม่โชว์ชื่อ + Bubble ทันที
-                            // ต้องรอแป๊บนึงให้ Object สร้างเสร็จ (Next Tick)
                             setTimeout(() => {
-                                const newDeer = this.reindeerMap.get(owner);
+                                const newDeer = this.reindeerMap.get(ownerKey);
                                 if (newDeer) {
                                     newDeer.showNametag();
-                                    if (newData.wish) {
-                                        newDeer.restoreWish();
-                                    }
+                                    if (newData.wish) newDeer.restoreWish();
                                 }
                             }, 100);
-
-                        }, 2000); // เวลาต้องสัมพันธ์กับความเร็ววิ่ง
+                        }, 2000);
                     } else {
-                        // ถ้าไม่มีตัวอยู่บนจอเลย แต่อยากเปลี่ยน -> ก็เสกมาเลย
                         this.spawnReindeer(event.data);
                     }
                     break;
+
+                case 'DELETE_WISH':
+                    const targetDeer = this.reindeerMap.get(ownerKey);
+                    if (targetDeer) {
+                        targetDeer.showNametag();
+                        // เช็คว่ามี Wish อยู่จริงไหม
+                        if (targetDeer.wish && targetDeer.wish !== "") {
+                            targetDeer.deleteWish();
+                            targetDeer.sayTemporary('ลบคำอธิษฐานแล้วจ้า!', 'cloud', 3000);
+                        } else {
+                            targetDeer.sayTemporary('ยังไม่ได้ขอพรเลยนะ!', 'cloud', 3000);
+                        }
+                        targetDeer.jump();
+                    }
+                    break;
+
                 case 'USER_OFFLINE':
-                    const leavingDeer = this.reindeerMap.get(owner);
+                    const leavingDeer = this.reindeerMap.get(ownerKey);
                     if (leavingDeer) {
                         leavingDeer.jump();
                         leavingDeer.showNametag();
-
                         const byeWords = ["ไปก่อนนะ...", "ง่วงแล้ว...", "บายจ้า!", "ZZZzz.."];
                         const word = byeWords[Math.floor(Math.random() * byeWords.length)];
-                        leavingDeer.sayTemporary(word, 'cloud', 2000);
+                        leavingDeer.sayTemporary(word, 'cloud');
 
                         setTimeout(() => {
                             if (leavingDeer && !leavingDeer.destroyed) {
                                 leavingDeer.runAway(event.exitDirection || 'left');
-
                                 setTimeout(() => {
-                                    this.removeReindeer(owner);
+                                    this.removeReindeer(ownerKey);
                                 }, 2000);
                             }
                         }, 2500);
                     }
+                    break;
 
                 case 'DISMISS':
-                    if (this.reindeerMap.has(owner)) {
-                        // ทำให้น้องกวางวิ่งหนีออกไปเอง (ดูเป็นธรรมชาติกว่าหายวับไปค่ะ)
-                        const reindeer = this.reindeerMap.get(owner);
+                    if (this.reindeerMap.has(ownerKey)) {
+                        const reindeer = this.reindeerMap.get(ownerKey);
                         reindeer.state = STATES.RUNNING;
                     }
                     break;
-
             }
         });
 
@@ -234,49 +213,53 @@ class ReindeerApp {
     }
 
     spawnReindeer(data) {
-        if (this.reindeerMap.has(data.owner)) {
-            this.removeReindeer(data.owner);
+        // ✅ 1. แปลงชื่อเจ้าของเป็นตัวเล็กทันที (เพื่อใช้เป็น Key)
+        const ownerKey = data.owner.toLowerCase();
+
+        // เช็คว่ามีตัวเก่าอยู่ไหม (ใช้ Key ตัวเล็ก)
+        if (this.reindeerMap.has(ownerKey)) {
+            this.removeReindeer(ownerKey);
         }
 
+        // สร้างกวาง (ส่ง data เดิมที่มีชื่อสวยๆ ไปให้ Reindeer สร้างป้ายชื่อ)
         const reindeer = new Reindeer(data, this.assets);
-        const nameTag = reindeer.createUI(); // สร้างป้ายชื่อ
+        const nameTag = reindeer.createUI();
 
-        // ✅ แยกบ้านให้กวางกับชื่อ
         this.reindeerLayer.addChild(reindeer);
         this.uiLayer.addChild(nameTag);
-
-        // ✅ สั่งให้โชว์ชื่อทันทีที่เกิด
         reindeer.showNametag();
 
-        this.reindeerMap.set(data.owner, reindeer);
+        // ✅ 2. เก็บลง Map ด้วย Key ตัวเล็ก
+        this.reindeerMap.set(ownerKey, reindeer);
+        console.log(`✨ Spawned: ${data.owner} (Key: ${ownerKey})`);
     }
 
     removeReindeer(owner) {
-        const reindeer = this.reindeerMap.get(owner);
+        // ✅ แปลงเป็นตัวเล็กก่อนลบ
+        const ownerKey = owner.toLowerCase();
+        const reindeer = this.reindeerMap.get(ownerKey);
+
         if (reindeer) {
-            // ✅ ต้องลบทั้งกวางและชื่อ ไม่งั้นจะเกิด "ป้ายชื่อผี" ค้างขอบจอค่ะ
             if (reindeer.nameTag) this.uiLayer.removeChild(reindeer.nameTag);
             this.reindeerLayer.removeChild(reindeer);
 
             reindeer.destroy({ children: true });
-            this.reindeerMap.delete(owner);
+            this.reindeerMap.delete(ownerKey);
         }
     }
 
     update(delta) {
-        this.reindeerMap.forEach((reindeer, owner) => {
+        this.reindeerMap.forEach((reindeer, ownerKey) => {
             reindeer.update(delta);
             if (reindeer.nameTag) {
                 reindeer.nameTag.x = reindeer.x;
-                reindeer.nameTag.y = reindeer.y + 10; // อยู่ใต้เท้าตามใจคุณ Nair ค่ะ
+                reindeer.nameTag.y = reindeer.y + 10;
             }
-            if (reindeer.destroyed) this.reindeerMap.delete(owner);
+            if (reindeer.destroyed) this.reindeerMap.delete(ownerKey);
         });
 
-        // ✅ Sort เฉพาะเลเยอร์กวาง ไม่ต้องมายุ่งกับชื่อ (ชื่อจะได้อยู่บนสุดตลอด)
         this.reindeerLayer.children.sort((a, b) => a.y - b.y);
     }
 }
 
-// เริ่มการทำงานทันทีที่โหลดไฟล์นี้ค่ะ
 new ReindeerApp();

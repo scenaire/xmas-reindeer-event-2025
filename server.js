@@ -57,18 +57,42 @@ chatClient.connect().catch(console.error);
 
 chatClient.on('message', (channel, tags, message, self) => {
 
-    const msg = message.toLowerCase();
+    // 1. แยกข้อความด้วยช่องว่าง (Space)
+    const args = message.trim().split(/\s+/);
 
-    // เช็คว่าขึ้นต้นด้วย !reindeer change หรือไม่
-    if (msg.startsWith('!reindeer change')) {
-        console.log(`💬 [Chat Command] ${tags['display-name']} used: ${message}`);
+    // 2. ดึง Command ตัวแรกมาเช็ค
+    const command = args[0].toLowerCase();
 
-        // ส่งเข้า RewardHandler ไปจัดการต่อเลย (Logic ตัดคำอยู่ในนั้นแล้ว)
-        rewardHandler.handleChange({
-            user_name: tags['display-name'], // ชื่อคนพิมพ์
-            user_input: message,             // ข้อความเต็มๆ
-            message: message
-        });
+    // 3. ดึง Subcommand ตัวที่สอง
+    const subcommand = args[1] ? args[1].toLowerCase() : null;
+
+    if (command === '!reindeer') {
+        const owner = tags.username;
+        console.log(`💬 [Command] ${tags['display-name']} used: ${command} ${subcommand || ''}`);
+
+        switch (subcommand) {
+            case 'change':
+                rewardHandler.handleChange({
+                    user_name: tags['display-name'],
+                    user_input: message,
+                    message: message
+                });
+                break;
+            case 'deletewish':
+                // 1. ลบในฐานข้อมูลผ่าน DataManager ที่เราเพิ่งแก้
+                dataManager.deleteUserWish(owner);
+                console.log(`🧹 [Database] Wish deleted for: ${owner}`);
+
+                // 2. ส่งสัญญาณบอกหน้าจอ (Socket)
+                io.emit('game_event', {
+                    type: 'DELETE_WISH',
+                    owner: owner
+                });
+                break;
+            default:
+                console.log(`⚠️ Unknown subcommand: ${subcommand}`);
+                break;
+        }
     }
 });
 

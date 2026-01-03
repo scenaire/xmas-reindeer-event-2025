@@ -19,7 +19,7 @@
   },
   "Chanamnom": {
     "owner": "Chanamnom",
-    "wish": "ขอให้คุณพิมมาสตรีมบ่อยๆ",
+    "wish": null,
     "rarity": "Common",
     "image": "texture_0.png",
     "behavior": "normal",
@@ -109,7 +109,7 @@
   },
   "c_nairs": {
     "owner": "c_nairs",
-    "wish": "ทดสอบ",
+    "wish": null,
     "rarity": "Epic",
     "image": "texture_3.png",
     "behavior": "brave",

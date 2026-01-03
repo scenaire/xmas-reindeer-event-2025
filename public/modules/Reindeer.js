@@ -321,7 +321,7 @@ export class Reindeer extends PIXI.AnimatedSprite {
      * 3. ฟังก์ชันพูดชั่วคราว (System Message)
      * ใช้สำหรับบ่น, บอกลา, หรือแจ้งเตือน (ไม่ทับ Wish เดิม)
      */
-    sayTemporary(text, type = 'cloud', duration = CONFIG.TEMPORARY_MESSAGE_DURATION || 3000) {
+    sayTemporary(text, type = 'cloud') {
         // ยกเลิก Timer ของ addWish เดิมก่อน
         if (this.bubbleTimer) clearTimeout(this.bubbleTimer);
 
@@ -333,13 +333,9 @@ export class Reindeer extends PIXI.AnimatedSprite {
         this.tempTimer = setTimeout(() => {
             if (!this.destroyed) {
                 // จบเวลาชั่วคราว -> กู้คืนของเดิม หรือ ลบไปเลยถ้าไม่มีของเดิม
-                if (this.wish) {
-                    this.restoreWish();
-                } else {
-                    this.removeBubble(false);
-                }
+                this.removeBubble(false);
             }
-        }, duration);
+        }, CONFIG.TEMPORARY_MESSAGE_DURATION || 3000);
     }
 
     /**
@@ -358,6 +354,12 @@ export class Reindeer extends PIXI.AnimatedSprite {
         } else {
             this.removeBubble(false);
         }
+    }
+
+    deleteWish() {
+        this.wish = null;
+        this.bubbleType = 'default';
+        this.removeBubble(false); // false เพื่อให้ค่อยๆ Fade out สวยๆ ค่ะ
     }
 
     syncBubblePosition() {

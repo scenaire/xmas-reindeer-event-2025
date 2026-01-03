@@ -66,6 +66,21 @@ class DataManager {
         this.writeJson(this.PATHS.GAME_STATE, state);
     }
 
+    deleteUserWish(owner) {
+        const state = this.getGameState();
+
+        const realKey = Object.keys(state).find(key => key.toLowerCase() === owner.toLowerCase());
+
+        if (realKey && state[realKey]) {
+            state[realKey].wish = null;
+            state[realKey].bubbleType = 'default';
+            return this.writeJson(this.PATHS.GAME_STATE, state);
+        }
+
+        console.warn(`⚠️ [DataManager] User not found for deletion: ${owner}`);
+        return false;
+    }
+
     // --- Collection & Gacha Logic ---
     getCollection() {
         return this.readJson(this.PATHS.COLLECTION) || {};
