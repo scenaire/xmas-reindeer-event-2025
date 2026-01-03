@@ -74,8 +74,8 @@ export class Reindeer extends PIXI.AnimatedSprite {
             this.handleWalkingAndRunning(delta);
         }
 
-        // Bubble
-        if (this.bubbleElement) {
+        // อัปเดตตำแหน่ง Bubble (เรียกผ่าน Class wrapper)
+        if (this.bubble) {
             this.syncBubblePosition();
         }
 
@@ -285,30 +285,17 @@ export class Reindeer extends PIXI.AnimatedSprite {
      * ทำหน้าที่แค่สร้าง DOM และแปะลงหน้าจอ ไม่บันทึกค่าใดๆ
      */
     displayBubble(text, type = 'default') {
-        // ลบอันเก่าก่อนเสมอ
+        // ลบอันเก่าก่อนเสมอ (เพื่อไม่ให้ซ้อนกัน)
         this.removeBubble(true);
 
-        const config = CONFIG.BUBBLE_TYPES[type] || CONFIG.BUBBLE_TYPES.default;
+        // ✅ สร้างใหม่ผ่าน Class ChatBubble
+        this.bubble = new ChatBubble(text, type);
 
-        // สร้าง Element
-        this.bubbleElement = document.createElement('div');
-        this.bubbleElement.className = `wish-bubble ${config.class || ''}`;
-
-        const boxPath = `./assets/bubble/${config.box}`;
-        const tailPath = `./assets/bubble/${config.tail}`;
-
-        this.bubbleElement.style.setProperty('--box-bg', `url('${boxPath}')`);
-        this.bubbleElement.style.setProperty('--tail-bg', `url('${tailPath}')`);
-        this.bubbleElement.style.setProperty('--font-color', config.fontColor);
-        this.bubbleElement.style.setProperty('--bg-color', config.backgroundColor || '#ffffff');
-
-        this.bubbleElement.innerHTML = `<div class="bubble-content">${text}</div>`;
-
-        const container = document.getElementById('bubble-container');
-        if (container) container.appendChild(this.bubbleElement);
-
-        // จัดตำแหน่ง
+        // ✅ จัดตำแหน่งครั้งแรกทันที
         this.syncBubblePosition();
+
+        // ✅ สั่งให้เล่น Animation เด้งดึ๋ง
+        this.bubble.show();
     }
 
     /**
@@ -316,17 +303,17 @@ export class Reindeer extends PIXI.AnimatedSprite {
      * ใช้สำหรับคำสั่ง !wish หรือ Redeem ที่ต้องการบันทึกถาวร
      */
     addWish(text, type = 'default') {
-        // ✅ บันทึกข้อมูลลง Memory
+        // บันทึกข้อมูลลง Memory ของกวาง
         this.wish = text;
         this.bubbleType = type;
 
-        // ✅ สั่งแสดงผล
+        // สั่งแสดงผล
         this.displayBubble(text, type);
 
-        // ตั้งเวลาลบตามปกติ (เช่น 15 วิ)
+        // ตั้งเวลาลบ (Auto Remove)
         if (this.bubbleTimer) clearTimeout(this.bubbleTimer);
         this.bubbleTimer = setTimeout(() => {
-            this.removeBubble(false); // Fade out
+            this.removeBubble(false); // false = ให้ค่อยๆ Fade out
         }, CONFIG.WISH_DURATION || 15000);
     }
 
@@ -335,17 +322,22 @@ export class Reindeer extends PIXI.AnimatedSprite {
      * ใช้สำหรับบ่น, บอกลา, หรือแจ้งเตือน (ไม่ทับ Wish เดิม)
      */
     sayTemporary(text, type = 'cloud', duration = CONFIG.TEMPORARY_MESSAGE_DURATION || 3000) {
-        // ยกเลิก Timer การลบของ addWish ก่อน (เดี๋ยวหายกลางคัน)
+        // ยกเลิก Timer ของ addWish เดิมก่อน
         if (this.bubbleTimer) clearTimeout(this.bubbleTimer);
 
-        // ✅ แสดงข้อความชั่วคราวเลย (ไม่ต้องบันทึก)
+        // แสดงผล (แต่ไม่บันทึกลง this.wish)
         this.displayBubble(text, type);
 
         // ตั้งเวลาคืนค่าเดิม
         if (this.tempTimer) clearTimeout(this.tempTimer);
         this.tempTimer = setTimeout(() => {
             if (!this.destroyed) {
-                this.removeBubble(false);
+                // จบเวลาชั่วคราว -> กู้คืนของเดิม หรือ ลบไปเลยถ้าไม่มีของเดิม
+                if (this.wish) {
+                    this.restoreWish();
+                } else {
+                    this.removeBubble(false);
+                }
             }
         }, duration);
     }
@@ -356,59 +348,42 @@ export class Reindeer extends PIXI.AnimatedSprite {
      */
     restoreWish() {
         if (this.wish) {
-            // ถ้ามีพรอยู่ ให้แสดงพรเดิม
             this.displayBubble(this.wish, this.bubbleType);
 
-            // ตั้งเวลาลบใหม่อีกรอบ (เริ่มนับ 15 วิใหม่)
+            // ตั้งเวลานับถอยหลังใหม่
             if (this.bubbleTimer) clearTimeout(this.bubbleTimer);
             this.bubbleTimer = setTimeout(() => {
                 this.removeBubble(false);
             }, CONFIG.WISH_DURATION || 15000);
         } else {
-            // ถ้าไม่มีพร ก็ลบออกไปเลย
             this.removeBubble(false);
         }
     }
 
     syncBubblePosition() {
-        if (!this.bubbleElement) return;
+        if (!this.bubble) return;
 
-        // ดึงพิกัดจริงจาก Pixi
         const globalPos = this.getGlobalPosition();
-
-        // 1. ปรับแกน X: ไม่ต้องทำอะไรมาก เดี๋ยวใช้ CSS ดึงกลับมาตรงกลางเอง
-        const x = globalPos.x;
-
-        // 2. ปรับแกน Y: เอาแค่ระดับ "เท้า" ลบด้วย "ความสูงตัวกวาง" (ประมาณ 100-110px)
-        // ถ้ายังสูงไป ให้ลดเลข 110 ลงเหลือ 100 หรือ 90 นะคะ
-        const y = globalPos.y - 110;
-
-        // 3. ใช้ transform จัดตำแหน่ง + จัดกึ่งกลาง (สำคัญมาก!)
-        // translate3d(x, y, 0) -> ย้ายไปตำแหน่ง
-        // translate(-50%, -100%) -> ดึงกลับมาซ้าย 50% และดึงขึ้น 100% (เพื่อให้จุด y คือก้นกล่อง)
-        this.bubbleElement.style.transform = `translate3d(${x}px, ${y}px, 0) translate(-50%, -100%)`;
+        // ส่งพิกัดไปให้ ChatBubble อัปเดต CSS เอาเอง
+        this.bubble.updatePosition(globalPos.x, globalPos.y);
     }
 
     removeBubble(immediate = true) {
-        // 1. ยกเลิก Timer เก่าก่อนเสมอ (สำคัญมาก! แก้บั๊กบับเบิ้ลค้าง)
+        // เคลียร์ Timer กันพลาด
         if (this.bubbleTimer) {
             clearTimeout(this.bubbleTimer);
             this.bubbleTimer = null;
         }
 
-        // 2. ถ้ามีบับเบิ้ลอยู่ จัดการมัน
-        if (this.bubbleElement) {
-            const el = this.bubbleElement;
-            this.bubbleElement = null; // ตัดความสัมพันธ์ทันที (จะได้หยุด Sync)
-
+        if (this.bubble) {
             if (immediate) {
-                // ถ้าสั่งลบทันที (เช่น มีอันใหม่มาแทน) -> ลบเลย
-                el.remove();
+                this.bubble.destroy(); // ลบทันที
             } else {
-                // ถ้าหมดเวลาตามธรรมชาติ -> ค่อยๆ จางหาย
-                el.classList.add('fade-out');
-                setTimeout(() => el.remove(), 500); // ลบจริงหลัง Fade จบ
+                this.bubble.hide(); // ค่อยๆ Fade out (แล้วมันจะ destroy ตัวเองทีหลัง)
             }
+
+            // ตัดการเชื่อมต่อทันที (เพื่อให้ update loop หยุด sync)
+            if (immediate) this.bubble = null;
         }
     }
 }

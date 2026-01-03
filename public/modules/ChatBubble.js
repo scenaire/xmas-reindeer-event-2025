@@ -21,39 +21,63 @@ export class ChatBubble {
         // ใส่ข้อความ (รองรับ HTML Emote ได้เลย!)
         div.innerHTML = text;
 
-        // Inject CSS Variables เพื่อเปลี่ยนรูปและสี
-        div.style.setProperty('--box-bg', `url('${bubbleConfig.box}')`);
-        div.style.setProperty('--tail-bg', `url('${bubbleConfig.tail}')`);
+        const basePath = CONFIG.BUBBLE_TYPES.BASE_PATH || './assets/bubble/';
+        const boxUrl = `url('${basePath}${bubbleConfig.box}')`;
+        const tailUrl = `url('${basePath}${bubbleConfig.tail}')`;
+
+        // Inject CSS Variables
+        div.style.setProperty('--box-bg', boxUrl);
+        div.style.setProperty('--tail-bg', tailUrl);
         div.style.setProperty('--font-color', bubbleConfig.fontColor);
         div.style.setProperty('--font-family', fontConfig.FONT_FAMILY);
         div.style.setProperty('--font-size', `${fontConfig.FONT_SIZE}px`);
+        div.style.setProperty('--bg-color', bubbleConfig.backgroundColor || '#ffffff');
 
-        // เอาไปแปะใน Container หน้าเว็บ
-        document.getElementById('bubble-container').appendChild(div);
+        const container = document.getElementById('bubble-container');
+        if (container) container.appendChild(div);
+
         this.element = div;
     }
 
     /**
-     * ฟังก์ชันสำคัญ! อัปเดตตำแหน่ง div ให้ตรงกับกวาง
-     * @param {number} x - พิกัด X ของกวาง
-     * @param {number} y - พิกัด Y ของกวาง
+     * สั่งให้บับเบิ้ล "เด้ง" ออกมา (Entrance Animation)
+     */
+    show() {
+        if (!this.element) return;
+
+        // รอเฟรมถัดไปเพื่อให้ Browser รับรู้ State เริ่มต้นก่อน แล้วค่อยเติม class
+        requestAnimationFrame(() => {
+            if (this.element) this.element.classList.add('show');
+        });
+    }
+
+    /**
+     * สั่งให้บับเบิ้ล "ค่อยๆ หายไป" (Exit Animation)
+     */
+    hide() {
+        if (!this.element) return;
+
+        this.element.classList.remove('show');
+        this.element.classList.add('fade-out'); // ต้องมีคลาสนี้ใน style.css นะคะ
+
+        // รอ Animation จบ (0.5s) แล้วค่อยลบจาก DOM จริงๆ
+        setTimeout(() => {
+            this.destroy();
+        }, 500);
+    }
+
+    /**
+     * อัปเดตตำแหน่ง (รับพิกัด Global ของกวางมา)
      */
     updatePosition(x, y) {
         if (!this.element || this.isDestroyed) return;
-
-        // คำนวณตำแหน่ง (ปรับ offset ตรงนี้ได้)
-        const bubbleX = x;
-        const bubbleY = y - 130; // ลอยเหนือหัวกวาง 130px
-
-        // ใช้ transform: translate จะลื่นกว่า top/left มากๆ
-        // ลบ 50% ของความกว้างตัวเองออก เพื่อให้จุดกึ่งกลางตรงกับหัวกวาง
-        const offsetX = this.element.offsetWidth / 2;
-        const offsetY = this.element.offsetHeight;
-
-        this.element.style.left = `${bubbleX - offsetX}px`;
-        this.element.style.top = `${bubbleY - offsetY}px`;
+        this.element.style.left = `${x}px`;
+        this.element.style.top = `${y - 120}px`;
     }
 
+    /**
+     * ลบทิ้งทันที (ไม่มี Animation)
+     */
     destroy() {
         if (this.element && this.element.parentNode) {
             this.element.parentNode.removeChild(this.element);

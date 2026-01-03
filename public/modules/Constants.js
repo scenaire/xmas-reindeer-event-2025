@@ -72,12 +72,13 @@ export const CONFIG = {
     },
 
     BUBBLE_TYPES: {
+        BASE_PATH: './assets/bubble/',
         default: {
             class: 'bubble-default',
             fontColor: '#352520',
             box: 'bubble_box.png',
             tail: 'bubble_tail.png',
-            backgroundColor: '#ffffff',
+            backgroundColor: '#f4efee',
         },
         cloud: {
             class: 'bubble-cloud',

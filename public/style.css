@@ -50,9 +50,8 @@ html {
 .wish-bubble {
     /* --- จัดตำแหน่ง (Positioning) --- */
     position: absolute;
-    top: 0;
-    left: 0;
-    margin: 0;
+    transform: translate(-50%, -100%) scale(1);
+    transform-origin: center bottom;
 
     /* --- จัด Layout ภายใน --- */
     display: inline-flex;
@@ -81,7 +80,6 @@ html {
     /* ถ้าขอบในรูปหนา 3px ให้แก้เป็น 3, ถ้าหนา 5px ให้แก้เป็น 5 */
     /* คำว่า 'fill' บังคับให้แสดงพื้นหลังตรงกลาง */
     border-image-slice: 4 fill;
-
     border-image-repeat: stretch;
     /* ยืดส่วนกลางให้เต็ม */
 
@@ -91,6 +89,7 @@ html {
     /* ขนาดกล่อง */
     min-width: 60px;
     max-width: 220px;
+    width: max-content;
 
     /* Animation */
     animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
