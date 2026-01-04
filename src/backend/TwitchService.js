@@ -1,4 +1,3 @@
-import tmi from 'tmi.js';
 import crypto from 'crypto';
 import 'dotenv/config';
 

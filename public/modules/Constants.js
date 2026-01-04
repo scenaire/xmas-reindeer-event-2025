@@ -119,5 +119,6 @@ export const STATES = {
     WALKING: 'WALKING',   // เดินไปมา
     JUMPING: 'JUMPING',   // กำลังโดด
     RUNNING: 'RUNNING',    // วิ่งหนีออกซ้าย
-    ZERO_GRAVITY: 'ZERO_GRAVITY' // ไม่มีแรงโน้มถ่วง
+    ZERO_GRAVITY: 'ZERO_GRAVITY', // ไม่มีแรงโน้มถ่วง
+    FALLING: 'FALLING', // กำลังตก
 };
